@@ -100,14 +100,14 @@ export function costImportTx(tx: UnsignedTx): number {
 }
 
 export function calcBytesCost(len: number): number {
-  return len * Defaults.network[1].C.txBytesGas
+  return len * Defaults.network[1191772].C.txBytesGas
 }
 
 export function costExportTx(tx: UnsignedTx): number {
   const bytesCost: number = calcBytesCost(tx.toBuffer().byteLength)
   const exportTx = tx.getTransaction() as ExportTx
   const numSigs: number = exportTx.getInputs().length
-  const sigCost: number = numSigs * Defaults.network[1].C.costPerSignature
+  const sigCost: number = numSigs * Defaults.network[1191772].C.costPerSignature
   const fixedFee: number = 10000
   return bytesCost + sigCost + fixedFee
 }

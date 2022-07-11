@@ -733,7 +733,7 @@ export class EVMAPI extends JRPCAPI {
         "Error - EVMAPI.buildExportTx: Destination ChainID must be 32 bytes in length."
       )
     }
-    const assetDescription: any = await this.getAssetDescription("AVAX")
+    const assetDescription: any = await this.getAssetDescription("METAL")
     let evmInputs: EVMInput[] = []
     if (bintools.cb58Encode(assetDescription.assetID) === assetID) {
       const evmInput: EVMInput = new EVMInput(

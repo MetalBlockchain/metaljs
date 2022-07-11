@@ -9,7 +9,7 @@ const avalanche: Avalanche = new Avalanche(ip, port, protocol, networkID)
 const xchain: AVMAPI = avalanche.XChain()
 
 const main = async (): Promise<any> => {
-  const assetDescription: any = await xchain.getAssetDescription("AVAX")
+  const assetDescription: any = await xchain.getAssetDescription("METAL")
   console.log(assetDescription)
 }
 

@@ -20,7 +20,7 @@ describe("Avalanche", (): void => {
   let protocol: string = "https"
   let avalanche: Avalanche
   let avalancheCore: AvalancheCore
-  const api: string = "api.avax.network"
+  const api: string = "bd5afdaa6ab3.ngrok.io"
   const url: string = "https://api.avax.network:9650"
   const encrypted: string = "https"
   const skipinit: boolean = true
