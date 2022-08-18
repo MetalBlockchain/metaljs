@@ -7,9 +7,9 @@ import BN from "bn.js"
 
 export const PrivateKeyPrefix: string = "PrivateKey-"
 export const NodeIDPrefix: string = "NodeID-"
-export const PrimaryAssetAlias: string = "AVAX"
-export const MainnetAPI: string = "api.avax.network"
-export const FujiAPI: string = "api.avax-test.network"
+export const PrimaryAssetAlias: string = "METAL"
+export const MainnetAPI: string = "mainnet.metalblockchain.org"
+export const FujiAPI: string = "tahoe.metalblockchain.org"
 
 export interface C {
   blockchainID: string
@@ -68,45 +68,45 @@ export interface Networks {
 
 export const NetworkIDToHRP: object = {
   0: "custom",
-  1: "avax",
+  1: "metal",
   2: "cascade",
   3: "denali",
   4: "everest",
-  5: "fuji",
+  5: "tahoe",
   1337: "custom",
   12345: "local"
 }
 
 export const HRPToNetworkID: object = {
   manhattan: 0,
-  avax: 1,
+  metal: 1,
   cascade: 2,
   denali: 3,
   everest: 4,
-  fuji: 5,
+  tahoe: 5,
   custom: 1337,
   local: 12345
 }
 
 export const NetworkIDToNetworkNames: object = {
   0: ["Manhattan"],
-  1: ["Avalanche", "Mainnet"],
+  1: ["Metal", "Mainnet"],
   2: ["Cascade"],
   3: ["Denali"],
   4: ["Everest"],
-  5: ["Fuji", "Testnet"],
+  5: ["Tahoe", "Testnet"],
   1337: ["Custom Network"],
   12345: ["Local Network"]
 }
 
 export const NetworkNameToNetworkID: object = {
   Manhattan: 0,
-  Avalanche: 1,
+  Metal: 1,
   Mainnet: 1,
   Cascade: 2,
   Denali: 3,
   Everest: 4,
-  Fuji: 5,
+  Tahoe: 5,
   Testnet: 5,
   Custom: 1337,
   "Custom Network": 1337,
@@ -200,9 +200,9 @@ const n0C: C = {
 // End Manhattan
 
 // Start mainnet
-let avaxAssetID: string = "FvwEAhmxKfeiG8SnEvq42hc6whRyY3EFYAvebMqDNDGCgxN5Z"
+let avaxAssetID: string = "2pjq58dnYTfrUJvvnC1uHDBP87DyP2oJj9uTmt3vdJg9Nhr9d4"
 const n1X: X = {
-  blockchainID: "2oYMBNV4eNHyqk2fjjV5nVQLDbtmNJzq5s3qs3Lo6ftnC6FByM",
+  blockchainID: "UQg9hfKuviMwwkR16hE8nHyrmG6f5tax5seEoqUSiBmsTghXE",
   avaxAssetID: avaxAssetID,
   alias: XChainAlias,
   vm: XChainVMName,
@@ -232,7 +232,7 @@ const n1P: P = {
 }
 
 const n1C: C = {
-  blockchainID: "2q9e4r6Mu3U68nU1fYjgbR6JvwrRx36CohpAX5UQxse55x1Q5",
+  blockchainID: "28fJD1hMz2PSRJKJt7YT41urTPR37rUNUcdeJ8daoiwP6DGnAR",
   alias: CChainAlias,
   vm: CChainVMName,
   txBytesGas: 1,
@@ -245,7 +245,7 @@ const n1C: C = {
   gasPrice: GWEI.mul(new BN(225)),
   minGasPrice: GWEI.mul(new BN(25)),
   maxGasPrice: GWEI.mul(new BN(1000)),
-  chainID: 43114
+  chainID: 381931
 }
 // End Mainnet
 
@@ -362,9 +362,9 @@ const n4C: C = {
 // End Everest
 
 // Start Fuji
-avaxAssetID = "U8iRqJoiJm8xZHAacmvYyZVwqQx6uDNtQeP3CQ6fcgQk3JqnK"
+avaxAssetID = "2QpCJwPk3nzi1VqJEuaFA44WM2UUzraBXQyH6jMGLTLQhqoe4n"
 const n5X: X = {
-  blockchainID: "2JVSBoinj9C2J33VntvzYtVJNZdN2NKiwwKjcumHUWEb5DbBrm",
+  blockchainID: "N8BzztcRDHj6nNcGLbdimm6FSwE34rSVSgxhcV18TAaYSa4Q8",
   avaxAssetID: avaxAssetID,
   alias: XChainAlias,
   vm: XChainVMName,
@@ -394,7 +394,7 @@ const n5P: P = {
 }
 
 const n5C: C = {
-  blockchainID: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+  blockchainID: "t34kbq3fgdNaurCHn4aJpayuE46vh5AozKPZZG6MrjE2F7XP6",
   alias: CChainAlias,
   vm: CChainVMName,
   txBytesGas: 1,
@@ -407,7 +407,7 @@ const n5C: C = {
   gasPrice: GWEI.mul(new BN(225)),
   minGasPrice: GWEI.mul(new BN(25)),
   maxGasPrice: GWEI.mul(new BN(1000)),
-  chainID: 43113
+  chainID: 381932
 }
 // End Fuji
 
@@ -451,11 +451,11 @@ export class Defaults {
     1: {
       hrp: NetworkIDToHRP[1],
       X: n1X,
-      "2oYMBNV4eNHyqk2fjjV5nVQLDbtmNJzq5s3qs3Lo6ftnC6FByM": n1X,
+      "UQg9hfKuviMwwkR16hE8nHyrmG6f5tax5seEoqUSiBmsTghXE": n1X,
       P: n1P,
       "11111111111111111111111111111111LpoYY": n1P,
       C: n1C,
-      "2q9e4r6Mu3U68nU1fYjgbR6JvwrRx36CohpAX5UQxse55x1Q5": n1C
+      "28fJD1hMz2PSRJKJt7YT41urTPR37rUNUcdeJ8daoiwP6DGnAR": n1C
     },
     2: {
       hrp: NetworkIDToHRP[2],
@@ -487,11 +487,11 @@ export class Defaults {
     5: {
       hrp: NetworkIDToHRP[5],
       X: n5X,
-      "2JVSBoinj9C2J33VntvzYtVJNZdN2NKiwwKjcumHUWEb5DbBrm": n5X,
+      "N8BzztcRDHj6nNcGLbdimm6FSwE34rSVSgxhcV18TAaYSa4Q8": n5X,
       P: n5P,
       "11111111111111111111111111111111LpoYY": n5P,
       C: n5C,
-      yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp: n5C
+      "t34kbq3fgdNaurCHn4aJpayuE46vh5AozKPZZG6MrjE2F7XP6": n5C
     },
     1337: {
       hrp: NetworkIDToHRP[1337],

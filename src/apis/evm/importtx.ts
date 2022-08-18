@@ -291,24 +291,30 @@ export class ImportTx extends EVMBaseTx {
     const feeDiff: BN = new BN(0)
     const avaxAssetID: string =
       Defaults.network[`${selectedNetwork}`].X.avaxAssetID
+      console.log(`Asset ID: ` + avaxAssetID)
     // sum incoming AVAX
     this.importIns.forEach((input: TransferableInput): void => {
       // only check StandardAmountInputs
+      console.log(`Input Asset ID: ${bintools.cb58Encode(input.getAssetID())}`)
       if (
         input.getInput() instanceof StandardAmountInput &&
         avaxAssetID === bintools.cb58Encode(input.getAssetID())
       ) {
+        console.log(`Retrieved Asset ID: ` + bintools.cb58Encode(input.getAssetID()))
         const ui = input.getInput() as unknown
         const i = ui as StandardAmountInput
         feeDiff.iadd(i.getAmount())
       }
     })
+    console.log(`Intermediary fee: ${feeDiff.toString(10)}`)
     // subtract all outgoing AVAX
     this.outs.forEach((evmOutput: EVMOutput): void => {
       if (avaxAssetID === bintools.cb58Encode(evmOutput.getAssetID())) {
+        console.log(`Retrieved Asset ID in output: ` + bintools.cb58Encode(evmOutput.getAssetID()))
         feeDiff.isub(evmOutput.getAmount())
       }
     })
+    console.log(feeDiff.toString(10));
     if (feeDiff.lt(fee)) {
       const errorMessage: string = `Error - ${fee} nAVAX required for fee and only ${feeDiff} nAVAX provided`
       throw new EVMFeeError(errorMessage)

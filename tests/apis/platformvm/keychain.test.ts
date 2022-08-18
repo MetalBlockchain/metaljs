@@ -1,5 +1,5 @@
 import { KeyChain, KeyPair } from "../../../src/apis/platformvm/keychain"
-import { Avalanche } from "../../../src/index"
+import { Metal } from "../../../src/index"
 import { Buffer } from "buffer/"
 import createHash from "create-hash"
 import BinTools from "../../../src/utils/bintools"
@@ -12,7 +12,7 @@ describe("PlatformVMKeyPair", (): void => {
   const ip: string = "127.0.0.1"
   const port: number = 9650
   const protocol: string = "https"
-  const avalanche: Avalanche = new Avalanche(
+  const avalanche: Metal = new Metal(
     ip,
     port,
     protocol,
@@ -56,7 +56,7 @@ describe("PlatformVMKeyPair", (): void => {
     avalanche.setNetworkID(1)
     hrp = avalanche.getHRP()
     networkID = avalanche.getNetworkID()
-    expect(hrp).toBe("avax")
+    expect(hrp).toBe("metal")
     expect(networkID).toBe(1)
 
     avalanche.setNetworkID(12345)

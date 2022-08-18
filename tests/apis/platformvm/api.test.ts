@@ -1,5 +1,5 @@
 import mockAxios from "jest-mock-axios"
-import { Avalanche } from "src"
+import { Metal } from "src"
 import { PlatformVMAPI } from "../../../src/apis/platformvm/api"
 import { Buffer } from "buffer/"
 import BN from "bn.js"
@@ -98,7 +98,7 @@ describe("PlatformVMAPI", (): void => {
   const username: string = "AvaLabs"
   const password: string = "password"
 
-  const avalanche: Avalanche = new Avalanche(
+  const avalanche: Metal = new Metal(
     ip,
     port,
     protocol,

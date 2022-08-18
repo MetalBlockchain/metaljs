@@ -31,11 +31,11 @@ import { Buffer } from "buffer/"
  *
  * Example usage:
  * ```js
- * const avalanche: Avalanche = new Avalanche("127.0.0.1", 9650, "https")
+ * const avalanche: Metal = new Metal("127.0.0.1", 9650, "https")
  * ```
  *
  */
-export default class Avalanche extends AvalancheCore {
+export default class Metal extends AvalancheCore {
   /**
    * Returns a reference to the Admin RPC.
    */
@@ -164,7 +164,7 @@ export default class Avalanche extends AvalancheCore {
   }
 }
 
-export { Avalanche }
+export { Metal }
 export { AvalancheCore }
 export { BinTools }
 export { BN }

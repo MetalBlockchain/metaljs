@@ -360,8 +360,8 @@ export default class BinTools {
     }
 
     if (
-      humanReadablePart !== "avax" &&
-      humanReadablePart !== "fuji" &&
+      humanReadablePart !== "metal" &&
+      humanReadablePart !== "tahoe" &&
       humanReadablePart != "local" &&
       humanReadablePart != "custom" &&
       humanReadablePart != hrp

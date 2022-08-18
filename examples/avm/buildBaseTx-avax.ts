@@ -23,7 +23,7 @@ const protocol: string = "http"
 const networkID: number = 1337
 const xBlockchainID: string = Defaults.network[networkID].X.blockchainID
 const avaxAssetID: string = Defaults.network[networkID].X.avaxAssetID
-const avalanche: Avalanche = new Avalanche(
+const avalanche: Metal = new Metal(
   ip,
   port,
   protocol,

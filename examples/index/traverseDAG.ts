@@ -10,7 +10,7 @@ const ip: string = "indexer-demo.avax.network"
 const port: number = 443
 const protocol: string = "https"
 const networkID: number = 1
-const avalanche: Avalanche = new Avalanche(ip, port, protocol, networkID)
+const avalanche: Metal = new Metal(ip, port, protocol, networkID)
 const index: IndexAPI = avalanche.Index()
 
 const sleep = (ms: number): Promise<unknown> => {
