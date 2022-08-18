@@ -1,5 +1,5 @@
 import mockAxios from "jest-mock-axios"
-import { Avalanche, BN } from "src"
+import { Metal, BN } from "src"
 import { EVMAPI } from "../../../src/apis/evm/api"
 import BinTools from "../../../src/utils/bintools"
 import * as bech32 from "bech32"
@@ -20,7 +20,7 @@ describe("EVMAPI", (): void => {
   const username: string = "AvaLabs"
   const password: string = "password"
 
-  const avalanche: Avalanche = new Avalanche(
+  const avalanche: Metal = new Metal(
     ip,
     port,
     protocol,

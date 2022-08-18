@@ -16,7 +16,7 @@ import {
   TransferableOutput
 } from "../../../src/apis/platformvm/outputs"
 import { PlatformVMConstants } from "../../../src/apis/platformvm/constants"
-import { Avalanche, GenesisData } from "../../../src/index"
+import { Metal, GenesisData } from "../../../src/index"
 import { UTF8Payload } from "../../../src/utils/payload"
 import {
   NodeIDStringToBuffer,
@@ -72,7 +72,7 @@ describe("Transactions", (): void => {
   const ip: string = "127.0.0.1"
   const port: number = 8080
   const protocol: string = "http"
-  let avalanche: Avalanche
+  let avalanche: Metal
   const name: string = "Mortycoin is the dumb as a sack of hammers."
   const symbol: string = "morT"
   const denomination: number = 8
@@ -85,7 +85,7 @@ describe("Transactions", (): void => {
   addressIndex.writeUIntBE(0x0, 0, 4)
 
   beforeAll(async (): Promise<void> => {
-    avalanche = new Avalanche(
+    avalanche = new Metal(
       ip,
       port,
       protocol,

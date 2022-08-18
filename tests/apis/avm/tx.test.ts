@@ -21,7 +21,7 @@ import {
   TransferableOperation,
   NFTTransferOperation
 } from "../../../src/apis/avm/ops"
-import { Avalanche } from "../../../src/index"
+import { Metal } from "../../../src/index"
 import { UTF8Payload } from "../../../src/utils/payload"
 import { InitialStates } from "../../../src/apis/avm/initialstates"
 import { UnixNow } from "../../../src/utils/helperfunctions"
@@ -88,7 +88,7 @@ describe("Transactions", (): void => {
   const ip: string = "127.0.0.1"
   const port: number = 8080
   const protocol: string = "http"
-  let avalanche: Avalanche
+  let avalanche: Metal
   const blockchainID: Buffer = bintools.cb58Decode(bID)
   const name: string = "Mortycoin is the dumb as a sack of hammers."
   const symbol: string = "morT"
@@ -96,7 +96,7 @@ describe("Transactions", (): void => {
   let avaxAssetID: Buffer
 
   beforeAll(async (): Promise<void> => {
-    avalanche = new Avalanche(
+    avalanche = new Metal(
       ip,
       port,
       protocol,

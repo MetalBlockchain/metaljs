@@ -13,7 +13,7 @@ import { Output } from "avalanche/dist/common"
 //      1337 - X-custom19rknw8l0grnfunjrzwxlxync6zrlu33yeg5dya
 //     12345 - X-local19rknw8l0grnfunjrzwxlxync6zrlu33ynpm3qq
 const networkID: number = 12345
-const avalanche: Avalanche = new Avalanche(
+const avalanche: Metal = new Metal(
   undefined,
   undefined,
   undefined,

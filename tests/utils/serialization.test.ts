@@ -41,7 +41,7 @@ import { getPreferredHRP } from "../../src/utils"
 const serialization: Serialization = Serialization.getInstance()
 
 describe("Serialization", (): void => {
-  const address: string = "X-avax1wst8jt3z3fm9ce0z6akj3266zmgccdp03hjlaj"
+  const address: string = "X-metal1wst8jt3z3fm9ce0z6akj3266zmgccdp0552tzh"
   const nodeID: string = "NodeID-MFrZFVCXPv5iCn6M9K6XduxGTYp891xXZ"
   const privateKey: string =
     "PrivateKey-ewoqjP7PxY4yr3iLTpLisriqt94hdyDFNgchSxGGztUrTXtNN"
@@ -328,7 +328,7 @@ describe("Serialization", (): void => {
     const amount: BN = new BN(0)
     const amountHex: string = "0000000000000000"
     const bytes: string = "0000000000000000000000000000000000000000"
-    const xAddress: string = "X-avax1pdurs53v6vtue9sw7am9ayjqh9mcnqe9s80sgn"
+    const xAddress: string = "X-metal1pdurs53v6vtue9sw7am9ayjqh9mcnqe94yhyhk"
     const xAddressHex: string = "0b7838522cd317cc960ef7765e9240b977898325"
     const address: string = "X-local18jma8ppw3nhx5r4ap8clazz0dps7rv5u00z96u"
     const bech32: SerializedType = "bech32"

@@ -1,8 +1,8 @@
-# AvalancheJS -  Typedoc Documentation
+# MetalJS -  Typedoc Documentation
 
 ## Overview
 
-We use [typedoc](https://typedoc.org) to turn comments in our typescript into markdown pages which can be copied into [the Avalanche Docs repo](https://github.com/ava-labs/avalanche-docs). Each time a new version of AvalancheJS gets deployed to [npm](https://www.npmjs.com/package/avalanche) then typedocs should be regenerated and pasted into the docs repo.
+We use [typedoc](https://typedoc.org) to turn comments in our typescript into markdown pages which can be copied into [the Metal Docs repo](https://github.com/MetalBlockchain/metal-docs). Each time a new version of MetalJS gets deployed to [npm](https://www.npmjs.com/package/avalanche) then typedocs should be regenerated and pasted into the docs repo.
 
 ## Steps
 

@@ -1,6 +1,6 @@
 import mockAxios from "jest-mock-axios"
 import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
-import { Avalanche } from "src"
+import { Metal } from "src"
 import {
   GetLoggerLevelResponse,
   LoadVMsResponse,
@@ -12,7 +12,7 @@ describe("Admin", (): void => {
   const ip: string = "127.0.0.1"
   const port: number = 9650
   const protocol: string = "https"
-  const avalanche: Avalanche = new Avalanche(
+  const avalanche: Metal = new Metal(
     ip,
     port,
     protocol,

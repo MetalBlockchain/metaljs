@@ -1,5 +1,5 @@
 import mockAxios from "jest-mock-axios"
-import { Avalanche } from "src"
+import { Metal } from "src"
 import { AVMAPI } from "../../../src/apis/avm/api"
 import { KeyPair, KeyChain } from "../../../src/apis/avm/keychain"
 import { Buffer } from "buffer/"
@@ -88,7 +88,7 @@ describe("AVMAPI", (): void => {
   const username: string = "AvaLabs"
   const password: string = "password"
 
-  const avalanche: Avalanche = new Avalanche(
+  const avalanche: Metal = new Metal(
     ip,
     port,
     protocol,

@@ -361,7 +361,7 @@ export default class BinTools {
 
     if (
       humanReadablePart !== "metal" &&
-      humanReadablePart !== "testnet" &&
+      humanReadablePart !== "tahoe" &&
       humanReadablePart != "local" &&
       humanReadablePart != "custom" &&
       humanReadablePart != hrp
