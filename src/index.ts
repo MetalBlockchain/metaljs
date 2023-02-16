@@ -1,6 +1,6 @@
 /**
  * @packageDocumentation
- * @module Avalanche
+ * @module Metal
  */
 import AvalancheCore from "./avalanche"
 import { AdminAPI } from "./apis/admin/api"
@@ -27,11 +27,11 @@ import BN from "bn.js"
 import { Buffer } from "buffer/"
 
 /**
- * AvalancheJS is middleware for interacting with Avalanche node RPC APIs.
+ * MetalJS is middleware for interacting with Metal node RPC APIs.
  *
  * Example usage:
  * ```js
- * const avalanche: Metal = new Metal("127.0.0.1", 9650, "https")
+ * const metal: Metal = new Metal("127.0.0.1", 9650, "https")
  * ```
  *
  */
@@ -88,10 +88,10 @@ export default class Metal extends AvalancheCore {
   PChain = () => this.apis.pchain as PlatformVMAPI
 
   /**
-   * Creates a new Avalanche instance. Sets the address and port of the main Avalanche Client.
+   * Creates a new Metal instance. Sets the address and port of the main Metal Client.
    *
-   * @param host The hostname to resolve to reach the Avalanche Client RPC APIs
-   * @param port The port to resolve to reach the Avalanche Client RPC APIs
+   * @param host The hostname to resolve to reach the Metal Client RPC APIs
+   * @param port The port to resolve to reach the Metal Client RPC APIs
    * @param protocol The protocol string to use before a "://" in a request,
    * ex: "http", "https", "git", "ws", etc. Defaults to http
    * @param networkID Sets the NetworkID of the class. Default [[DefaultNetworkID]]
