@@ -12,10 +12,10 @@ jobs:
   e2e:
     runs-on: ubuntu-20.04
     steps:
-      - name: Checkout AvalancheJS
+      - name: Checkout MetalJS
         uses: actions/checkout@v2
         with: 
-          repository: 'ava-labs/avalanchejs'
+          repository: 'MetalBlockchain/metaljs'
       - name: Install dependencies
         run: sudo apt update && sudo apt install zstd git build-essential nodejs -y
       - name: Install NodeJS dependencies
