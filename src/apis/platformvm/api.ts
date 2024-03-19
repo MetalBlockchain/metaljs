@@ -62,7 +62,7 @@ import {
 } from "./interfaces"
 import { TransferableOutput } from "./outputs"
 import { Serialization, SerializedType } from "../../utils"
-import { SubnetAuth } from "."
+import { Signer, SubnetAuth } from "."
 import { GenesisData } from "../avm"
 
 /**
@@ -1773,6 +1773,103 @@ export class PlatformVMAPI extends JRPCAPI {
       avaxAssetID,
       memo,
       asOf
+    )
+
+    if (!(await this.checkGooseEgg(builtUnsignedTx))) {
+      /* istanbul ignore next */
+      throw new GooseEggCheckError("Failed Goose Egg Check")
+    }
+
+    return builtUnsignedTx
+  }
+
+  buildAddPermissionlessValidatorTx = async (
+    utxoset: UTXOSet,
+    toAddresses: string[],
+    fromAddresses: string[],
+    changeAddresses: string[],
+    nodeID: string,
+    startTime: BN,
+    endTime: BN,
+    stakeAmount: BN,
+    rewardAddresses: string[],
+    delegationFee: number,
+    rewardLocktime: BN = new BN(0),
+    rewardThreshold: number = 1,
+    memo: PayloadBase | Buffer = undefined,
+    asOf: BN = UnixNow(),
+    subnetID: string | Buffer,
+    signer: Signer
+  ): Promise<UnsignedTx> => {
+    const to: Buffer[] = this._cleanAddressArray(
+      toAddresses,
+      "buildAddPermissionlessValidatorTx"
+    ).map((a: string): Buffer => bintools.stringToAddress(a))
+    const from: Buffer[] = this._cleanAddressArray(
+      fromAddresses,
+      "buildAddPermissionlessValidatorTx"
+    ).map((a: string): Buffer => bintools.stringToAddress(a))
+    const change: Buffer[] = this._cleanAddressArray(
+      changeAddresses,
+      "buildAddPermissionlessValidatorTx"
+    ).map((a: string): Buffer => bintools.stringToAddress(a))
+    const rewards: Buffer[] = this._cleanAddressArray(
+      rewardAddresses,
+      "buildAddPermissionlessValidatorTx"
+    ).map((a: string): Buffer => bintools.stringToAddress(a))
+
+    if (memo instanceof PayloadBase) {
+      memo = memo.getPayload()
+    }
+
+    const minStake: BN = (await this.getMinStake())["minValidatorStake"]
+    if (stakeAmount.lt(minStake)) {
+      throw new StakeError(
+        "PlatformVMAPI.buildAddPermissionlessValidatorTx -- stake amount must be at least " +
+          minStake.toString(10)
+      )
+    }
+
+    if (
+      typeof delegationFee !== "number" ||
+      delegationFee > 100 ||
+      delegationFee < 0
+    ) {
+      throw new DelegationFeeError(
+        "PlatformVMAPI.buildAddPermissionlessValidatorTx -- delegationFee must be a number between 0 and 100"
+      )
+    }
+
+    const avaxAssetID: Buffer = await this.getAVAXAssetID()
+
+    const now: BN = UnixNow()
+    if (startTime.lt(now) || endTime.lte(startTime)) {
+      throw new TimeError(
+        "PlatformVMAPI.buildAddPermissionlessValidatorTx -- startTime must be in the future and endTime must come after startTime"
+      )
+    }
+
+    const builtUnsignedTx: UnsignedTx = utxoset.buildAddPermissionlessValidatorTx(
+      this.core.getNetworkID(),
+      bintools.cb58Decode(this.blockchainID),
+      avaxAssetID,
+      to,
+      from,
+      change,
+      NodeIDStringToBuffer(nodeID),
+      startTime,
+      endTime,
+      stakeAmount,
+      rewardLocktime,
+      rewardThreshold,
+      rewards,
+      delegationFee,
+      new BN(0),
+      avaxAssetID,
+      memo,
+      asOf,
+      subnetID,
+      signer
     )
 
     if (!(await this.checkGooseEgg(builtUnsignedTx))) {

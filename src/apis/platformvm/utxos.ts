@@ -34,7 +34,7 @@ import {
   AssetAmount
 } from "../../common/assetamount"
 import { Output } from "../../common/output"
-import { AddDelegatorTx, AddValidatorTx } from "./validationtx"
+import { AddDelegatorTx, AddPermissionlessValidatorTx, AddValidatorTx, Signer } from "./validationtx"
 import { CreateSubnetTx } from "./createsubnettx"
 import { Serialization, SerializedEncoding } from "../../utils/serialization"
 import {
@@ -1195,6 +1195,101 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
       endTime,
       stakeAmount,
       stakeOuts,
+      new ParseableOutput(rewardOutputOwners),
+      delegationFee
+    )
+    return new UnsignedTx(UTx)
+  }
+
+  buildAddPermissionlessValidatorTx = (
+    networkID: number = DefaultNetworkID,
+    blockchainID: Buffer,
+    avaxAssetID: Buffer,
+    toAddresses: Buffer[],
+    fromAddresses: Buffer[],
+    changeAddresses: Buffer[],
+    nodeID: Buffer,
+    startTime: BN,
+    endTime: BN,
+    stakeAmount: BN,
+    rewardLocktime: BN,
+    rewardThreshold: number,
+    rewardAddresses: Buffer[],
+    delegationFee: number,
+    fee: BN = undefined,
+    feeAssetID: Buffer = undefined,
+    memo: Buffer = undefined,
+    asOf: BN = UnixNow(),
+    subnetID: string | Buffer,
+    signer: Signer
+  ): UnsignedTx => {
+    let ins: TransferableInput[] = []
+    let outs: TransferableOutput[] = []
+    let stakeOuts: TransferableOutput[] = []
+
+    const zero: BN = new BN(0)
+    const now: BN = UnixNow()
+    if (startTime.lt(now) || endTime.lte(startTime)) {
+      throw new TimeError(
+        "UTXOSet.buildAddValidatorTx -- startTime must be in the future and endTime must come after startTime"
+      )
+    }
+
+    if (delegationFee > 100 || delegationFee < 0) {
+      throw new TimeError(
+        "UTXOSet.buildAddValidatorTx -- startTime must be in the range of 0 to 100, inclusively"
+      )
+    }
+
+    const aad: AssetAmountDestination = new AssetAmountDestination(
+      toAddresses,
+      fromAddresses,
+      changeAddresses
+    )
+    if (avaxAssetID.toString("hex") === feeAssetID.toString("hex")) {
+      aad.addAssetAmount(avaxAssetID, stakeAmount, fee)
+    } else {
+      aad.addAssetAmount(avaxAssetID, stakeAmount, zero)
+      if (this._feeCheck(fee, feeAssetID)) {
+        aad.addAssetAmount(feeAssetID, zero, fee)
+      }
+    }
+
+    const minSpendableErr: Error = this.getMinimumSpendable(
+      aad,
+      asOf,
+      undefined,
+      undefined,
+      true
+    )
+    if (typeof minSpendableErr === "undefined") {
+      ins = aad.getInputs()
+      outs = aad.getChangeOutputs()
+      stakeOuts = aad.getOutputs()
+    } else {
+      throw minSpendableErr
+    }
+
+    const rewardOutputOwners: SECPOwnerOutput = new SECPOwnerOutput(
+      rewardAddresses,
+      rewardLocktime,
+      rewardThreshold
+    )
+
+    const UTx: AddPermissionlessValidatorTx = new AddPermissionlessValidatorTx(
+      networkID,
+      blockchainID,
+      outs,
+      ins,
+      memo,
+      nodeID,
+      startTime,
+      endTime,
+      stakeAmount,
+      subnetID,
+      signer,
+      stakeOuts,
+      new ParseableOutput(rewardOutputOwners),
       new ParseableOutput(rewardOutputOwners),
       delegationFee
     )

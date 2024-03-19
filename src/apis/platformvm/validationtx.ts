@@ -543,3 +543,242 @@ export class AddValidatorTx extends AddDelegatorTx {
     }
   }
 }
+
+export class AddPermissionlessValidatorTx extends WeightedValidatorTx {
+  protected _typeName = "AddPermissionlessValidatorTx"
+  protected _typeID = PlatformVMConstants.ADDPERMISSIONLESSVALIDATORTX
+
+  protected subnetID: Buffer = Buffer.alloc(32)
+  protected signer: Signer = undefined
+  protected stakeOuts: TransferableOutput[] = []
+  protected validatorRewardsOwner: ParseableOutput = undefined
+  protected delegatorRewardsOwner: ParseableOutput = undefined
+  protected delegationShares: number = 0 // Fee from 0-100
+  private static delegatorMultiplier: number = 10000
+
+  getDelegationFee(): number {
+    return this.delegationShares
+  }
+
+  getDelegationFeeBuffer(): Buffer {
+    let dBuff: Buffer = Buffer.alloc(4)
+    let buffnum: number = parseFloat(this.delegationShares.toFixed(4)) * AddPermissionlessValidatorTx.delegatorMultiplier
+    dBuff.writeUInt32BE(buffnum, 0)
+    return dBuff
+  }
+
+  getSubnetID(): Buffer {
+    return this.subnetID
+  }
+
+  getSigner(): Signer {
+    return this.signer
+  }
+
+  /**
+   * Returns the array of outputs being staked.
+   */
+  getStakeOuts(): TransferableOutput[] {
+    return this.stakeOuts
+  }
+
+  /**
+   * Should match stakeAmount. Used in sanity checking.
+   */
+  getStakeOutsTotal(): BN {
+    let val: BN = new BN(0)
+    for (let i: number = 0; i < this.stakeOuts.length; i++) {
+      val = val.add(
+        (this.stakeOuts[`${i}`].getOutput() as AmountOutput).getAmount()
+      )
+    }
+    return val
+  }
+
+  getValidatorRewardsOwner(): ParseableOutput {
+    return this.validatorRewardsOwner
+  }
+
+  getDelegatorRewardsOwner(): ParseableOutput {
+    return this.delegatorRewardsOwner
+  }
+
+  fromBuffer(bytes: Buffer, offset: number = 0): number {
+    offset = super.fromBuffer(bytes, offset)
+    this.subnetID = bintools.copyFrom(bytes, offset, offset + 32)
+    offset += 32
+    this.signer = new Signer()
+    this.signer.fromBuffer(bintools.copyFrom(bytes, offset, offset + 148))
+    offset += 148
+
+    // Get stakeouts
+    const numstakeouts = bintools.copyFrom(bytes, offset, offset + 4)
+    offset += 4
+    const outcount: number = numstakeouts.readUInt32BE(0)
+    this.stakeOuts = []
+    for (let i: number = 0; i < outcount; i++) {
+      const xferout: TransferableOutput = new TransferableOutput()
+      offset = xferout.fromBuffer(bytes, offset)
+      this.stakeOuts.push(xferout)
+    }
+
+    this.validatorRewardsOwner = new ParseableOutput()
+    offset = this.validatorRewardsOwner.fromBuffer(bytes, offset)
+    this.delegatorRewardsOwner = new ParseableOutput()
+    offset = this.delegatorRewardsOwner.fromBuffer(bytes, offset)
+
+    let dbuff: Buffer = bintools.copyFrom(bytes, offset, offset + 4)
+    offset += 4
+    this.delegationShares = dbuff.readUInt32BE(0) / AddPermissionlessValidatorTx.delegatorMultiplier
+
+    return offset
+  }
+
+  toBuffer(): Buffer {
+    let superBuff: Buffer = super.toBuffer()
+    let bsize: number = superBuff.length + this.subnetID.length
+    let barr: Buffer[] = [superBuff, this.subnetID]
+
+    let signerBuff: Buffer = this.signer.toBuffer()
+    barr.push(signerBuff)
+    bsize += signerBuff.length
+
+    const numouts: Buffer = Buffer.alloc(4)
+    numouts.writeUInt32BE(this.stakeOuts.length, 0)
+    barr.push(numouts)
+    bsize += numouts.length
+
+    this.stakeOuts = this.stakeOuts.sort(TransferableOutput.comparator())
+    for (let i: number = 0; i < this.stakeOuts.length; i++) {
+      let out: Buffer = this.stakeOuts[`${i}`].toBuffer()
+      barr.push(out)
+      bsize += out.length
+    }
+
+    let vro: Buffer = this.validatorRewardsOwner.toBuffer()
+    barr.push(vro)
+    bsize += vro.length
+    let dro: Buffer = this.delegatorRewardsOwner.toBuffer()
+    barr.push(dro)
+    bsize += dro.length
+    let delegationSharesBuff: Buffer = this.getDelegationFeeBuffer()
+    barr.push(delegationSharesBuff)
+    bsize += delegationSharesBuff.length
+
+    return Buffer.concat(barr, bsize)
+  }
+
+  constructor(
+    networkID: number = DefaultNetworkID,
+    blockchainID: Buffer = Buffer.alloc(32, 16),
+    outs: TransferableOutput[] = undefined,
+    ins: TransferableInput[] = undefined,
+    memo: Buffer = undefined,
+    nodeID: Buffer = undefined,
+    startTime: BN = undefined,
+    endTime: BN = undefined,
+    weight: BN = undefined,
+    subnetID: string | Buffer = undefined,
+    signer: Signer,
+    stakeOuts: TransferableOutput[] = undefined,
+    validatorRewardsOwner: ParseableOutput = undefined,
+    delegatorRewardsOwner: ParseableOutput = undefined,
+    delegationShares: number = 0
+  ) {
+    super(networkID, blockchainID, outs, ins, memo, nodeID, startTime, endTime, weight)
+    
+    if (typeof subnetID != "undefined") {
+      if (typeof subnetID === "string") {
+        this.subnetID = bintools.cb58Decode(subnetID)
+      } else {
+        this.subnetID = subnetID
+      }
+    }
+
+    this.signer = signer
+    if (typeof stakeOuts !== undefined) {
+      this.stakeOuts = stakeOuts
+    }
+    this.validatorRewardsOwner = validatorRewardsOwner
+    this.delegatorRewardsOwner = delegatorRewardsOwner
+    
+    if (typeof delegationShares === "number") {
+      if (delegationShares >= 0 && delegationShares <= 100) {
+        this.delegationShares = parseFloat(delegationShares.toFixed(4))
+      } else {
+        throw new DelegationFeeError(
+          "AddPermissionlessValidatorTx.constructor -- delegationFee must be in the range of 0 and 100, inclusively."
+        )
+      }
+    }
+  }
+}
+
+export class Signer {
+  protected typeID: Buffer = Buffer.alloc(4)
+  protected proofOfPossession: ProofOfPossession = undefined
+
+  fromBuffer(bytes: Buffer, offset: number = 0): number {
+    this.typeID = bintools.copyFrom(bytes, offset, offset + 4)
+    offset += 4
+    this.proofOfPossession = new ProofOfPossession()
+    this.proofOfPossession.fromBuffer(bintools.copyFrom(bytes, offset, offset + 144), 0)
+    offset += 144
+    
+    return offset
+  }
+
+  toBuffer(): Buffer {
+    return Buffer.concat([this.typeID, this.proofOfPossession.toBuffer()])
+  }
+
+  getTypeID(): number {
+    return this.typeID.readUInt32BE(0)
+  }
+
+  getProofOfPossession(): ProofOfPossession {
+    return this.proofOfPossession
+  }
+
+  constructor(
+    typeID: number,
+    proofOfPossession: ProofOfPossession
+  ) {
+    this.typeID.writeUInt32BE(typeID, 0)
+    this.proofOfPossession = proofOfPossession
+  }
+}
+
+export class ProofOfPossession {
+  protected publicKey: Buffer = Buffer.alloc(48)
+  protected signature: Buffer = Buffer.alloc(96)
+
+  fromBuffer(bytes: Buffer, offset: number = 0): number {
+    this.publicKey = bintools.copyFrom(bytes, offset, offset + 48)
+    offset += 48
+    this.signature = bintools.copyFrom(bytes, offset, offset + 96)
+    offset += 96
+    
+    return offset
+  }
+
+  toBuffer(): Buffer {
+    return Buffer.concat([this.publicKey, this.signature])
+  }
+
+  getPublicKeyString(): string {
+    return this.publicKey.toString('hex')
+  }
+
+  getSignature(): string {
+    return this.signature.toString('hex')
+  }
+
+  constructor(
+    publicKey: Buffer,
+    signature: Buffer,
+  ) {
+    this.publicKey = publicKey
+    this.signature = signature
+  }
+}

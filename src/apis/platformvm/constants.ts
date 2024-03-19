@@ -58,4 +58,8 @@ export class PlatformVMConstants {
   static ASSETNAMELEN: number = 128
 
   static ADDRESSLENGTH: number = 20
+
+  static ADDPERMISSIONLESSVALIDATORTX: number = 25
+
+  static SIGNERPRIMARYNETWORK: number = 28
 }
