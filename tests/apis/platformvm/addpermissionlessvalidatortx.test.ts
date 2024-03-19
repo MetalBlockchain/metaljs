@@ -60,7 +60,7 @@ describe("AddPermissionlessValidatorTx", (): void => {
     expect(value[0].getOutput().getLocktime().toString(10)).toBe("0")
     expect(bintools.addressToString("metal", "P", value[0].getOutput().getAddress(0))).toBe("P-metal1y9vqanrq0k4w5252f2c7jn6xjfzp6f9x5dng8f")
     expect(value[0].getOutput().getThreshold()).toBe(1)
-    const output: SECPTransferOutput = value[0].getOutput()
+    const output: SECPTransferOutput = value[0].getOutput() as SECPTransferOutput
     expect(output.getAmount().toString(10)).toBe("439998649125")
   })
 

@@ -679,7 +679,7 @@ export class AddPermissionlessValidatorTx extends WeightedValidatorTx {
     endTime: BN = undefined,
     weight: BN = undefined,
     subnetID: string | Buffer = undefined,
-    signer: Signer,
+    signer: Signer = undefined,
     stakeOuts: TransferableOutput[] = undefined,
     validatorRewardsOwner: ParseableOutput = undefined,
     delegatorRewardsOwner: ParseableOutput = undefined,
@@ -741,10 +741,13 @@ export class Signer {
   }
 
   constructor(
-    typeID: number,
-    proofOfPossession: ProofOfPossession
+    typeID?: number,
+    proofOfPossession?: ProofOfPossession
   ) {
-    this.typeID.writeUInt32BE(typeID, 0)
+    if (typeID) {
+      this.typeID.writeUInt32BE(typeID, 0)
+    }
+    
     this.proofOfPossession = proofOfPossession
   }
 }
@@ -775,8 +778,8 @@ export class ProofOfPossession {
   }
 
   constructor(
-    publicKey: Buffer,
-    signature: Buffer,
+    publicKey?: Buffer,
+    signature?: Buffer,
   ) {
     this.publicKey = publicKey
     this.signature = signature
