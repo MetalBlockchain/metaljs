@@ -1,6 +1,6 @@
 {
   "name": "@metalblockchain/metaljs",
-  "version": "3.16.7",
+  "version": "3.16.8",
   "description": "Metal Platform JS Library",
   "main": "dist/index.js",
   "scripts": {
