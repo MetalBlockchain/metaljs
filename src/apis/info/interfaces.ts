@@ -35,3 +35,20 @@ export interface UptimeResponse {
   rewardingStakePercentage: string
   weightedAveragePercentage: string
 }
+
+export interface UpgradesResponse {
+  apricotPhase1Time: string;
+  apricotPhase2Time: string;
+  apricotPhase3Time: string;
+  apricotPhase4Time: string;
+  apricotPhase4MinPChainHeight: number;
+  apricotPhase5Time: string;
+  apricotPhasePre6Time: string;
+  apricotPhase6Time: string;
+  apricotPhasePost6Time: string;
+  banffTime: string;
+  cortinaTime: string;
+  cortinaXChainStopVertexID: string;
+  durangoTime: string;
+  etnaTime: string;
+}
