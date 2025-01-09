@@ -12,6 +12,7 @@ import {
   IsBootstrappedParams,
   PeersParams,
   PeersResponse,
+  UpgradesResponse,
   UptimeResponse
 } from "./interfaces"
 
@@ -158,6 +159,16 @@ export class InfoAPI extends JRPCAPI {
    */
   uptime = async (): Promise<UptimeResponse> => {
     const response: RequestResponseData = await this.callMethod("info.uptime")
+    return response.data.result
+  }
+
+  /**
+   * Returns the network's observed uptime of this node.
+   *
+   * @returns Returns a Promise UptimeResponse which contains rewardingStakePercentage and weightedAveragePercentage.
+   */
+  upgrades = async (): Promise<UpgradesResponse> => {
+    const response: RequestResponseData = await this.callMethod("info.upgrades")
     return response.data.result
   }
 
