@@ -5,6 +5,7 @@ const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const { GitRevisionPlugin } = require('git-revision-webpack-plugin')
 const gitRevisionPlugin = new GitRevisionPlugin();
 const TerserPlugin = require('terser-webpack-plugin');
+const BundleAnalyzerPlugin = require("webpack-bundle-analyzer").BundleAnalyzerPlugin
 
 module.exports = {
   entry: {
@@ -28,7 +29,8 @@ module.exports = {
     fallback: {
       "stream": require.resolve("stream-browserify"),
       "crypto": require.resolve("crypto-browserify"),
-      "assert": require.resolve("assert/")
+      "assert": require.resolve("assert/"),
+      "vm": require.resolve("vm-browserify")
     }
   },
   output: {
@@ -50,6 +52,7 @@ module.exports = {
     new HtmlWebpackPlugin({
       title: 'Caching',
     }),
+    //new BundleAnalyzerPlugin()
   ],
   optimization: {
     minimizer: [

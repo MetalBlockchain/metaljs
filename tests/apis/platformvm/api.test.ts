@@ -1,11 +1,12 @@
 import mockAxios from "jest-mock-axios"
+import { jest } from '@jest/globals'
 import { Metal } from "src"
 import { PlatformVMAPI } from "../../../src/apis/platformvm/api"
 import { Buffer } from "buffer/"
 import BN from "bn.js"
 import BinTools from "../../../src/utils/bintools"
 import * as bech32 from "bech32"
-import { Defaults, PlatformChainID } from "../../../src/utils/constants"
+import { Defaults, PlatformChainID, PrimaryNetworkID } from "../../../src/utils/constants"
 import { UTXOSet } from "../../../src/apis/platformvm/utxos"
 import { PersistanceOptions } from "../../../src/utils/persistenceoptions"
 import { KeyChain } from "../../../src/apis/platformvm/keychain"
@@ -35,14 +36,16 @@ import {
   SerializedEncoding,
   SerializedType
 } from "../../../src/utils/serialization"
-import { AddValidatorTx } from "../../../src/apis/platformvm/validationtx"
+import { AddValidatorTx, ProofOfPossession, Signer } from "../../../src/apis/platformvm/validationtx"
 import {
   Blockchain,
   GetMinStakeResponse,
   GetRewardUTXOsResponse,
   Subnet,
   GetTxStatusResponse,
-  GetValidatorsAtResponse
+  GetValidatorsAtResponse,
+  FeeConfig,
+  FeeState
 } from "../../../src/apis/platformvm/interfaces"
 import { ErrorResponseObject } from "../../../src/utils/errors"
 import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
@@ -50,6 +53,10 @@ import {
   GetBalanceResponse,
   GetUTXOsResponse
 } from "src/apis/platformvm/interfaces"
+import { ImportTx, PlatformVMConstants } from "src/apis/platformvm"
+import { calculateFee } from "src/apis/platformvm/dynamicfee/calculator"
+import { Dimensions } from "src/apis/platformvm/dynamicfee/dimensions"
+import { getTransactionComplexity } from "src/apis/platformvm/dynamicfee/complexity"
 
 /**
  * @ignore
@@ -58,6 +65,8 @@ const bintools: BinTools = BinTools.getInstance()
 const serializer: Serialization = Serialization.getInstance()
 const display: SerializedEncoding = "display"
 const dumpSerialization: boolean = false
+const feeState: FeeState = { price: 1, capacity: 982818, excess: 17182, timestamp: "2025-01-09T10:41:33Z"};
+const feeConfig: FeeConfig = { weights: [ 1, 1000, 1000, 4], maxCapacity: 1000000, maxPerSecond: 100000, targetPerSecond: 500000, minPrice: 1, excessConversionConstant: 2164043 };
 
 const serialzeit = (aThing: Serializable, name: string): void => {
   if (dumpSerialization) {
@@ -1253,12 +1262,14 @@ describe("PlatformVMAPI", (): void => {
     test("buildImportTx", async (): Promise<void> => {
       const locktime: BN = new BN(0)
       const threshold: number = 1
-      platformvm.setTxFee(new BN(fee))
       const addrbuff1 = addrs1.map((a) => platformvm.parseAddress(a))
       const addrbuff2 = addrs2.map((a) => platformvm.parseAddress(a))
       const addrbuff3 = addrs3.map((a) => platformvm.parseAddress(a))
       const fungutxo: UTXO = set.getUTXO(fungutxoids[1])
       const fungutxostr: string = fungutxo.toString()
+
+      jest.spyOn(platformvm, 'getFeeState').mockResolvedValue(feeState);
+      jest.spyOn(platformvm, 'getFeeConfig').mockResolvedValue(feeConfig);
 
       const result: Promise<UnsignedTx> = platformvm.buildImportTx(
         set,
@@ -1283,7 +1294,6 @@ describe("PlatformVMAPI", (): void => {
 
       mockAxios.mockResponse(responseObj)
       const txu1: UnsignedTx = await result
-
       const txu2: UnsignedTx = set.buildImportTx(
         networkID,
         bintools.cb58Decode(blockchainID),
@@ -1291,6 +1301,9 @@ describe("PlatformVMAPI", (): void => {
         addrbuff1,
         addrbuff2,
         [fungutxo],
+        feeState,
+        feeConfig,
+        true,
         bintools.cb58Decode(PlatformChainID),
         platformvm.getTxFee(),
         await platformvm.getAVAXAssetID(),
@@ -1327,15 +1340,22 @@ describe("PlatformVMAPI", (): void => {
       expect(tx4.toBuffer().toString("hex")).toBe(checkTx)
 
       serialzeit(tx1, "ImportTx")
+
+      const fee = calculateFee(txu1, feeConfig.weights, BigInt(feeState.price));
+      expect(fee).toBe(5925n)
     })
 
     test("buildExportTx", async (): Promise<void> => {
-      platformvm.setTxFee(new BN(fee))
       const addrbuff1 = addrs1.map((a) => platformvm.parseAddress(a))
       const addrbuff2 = addrs2.map((a) => platformvm.parseAddress(a))
       const addrbuff3 = addrs3.map((a) => platformvm.parseAddress(a))
       const amount: BN = new BN(90)
       const type: SerializedType = "bech32"
+      const feeState: FeeState = { price: 1, capacity: 982818, excess: 17182, timestamp: "2025-01-09T10:41:33Z"};
+      const feeConfig: FeeConfig = { weights: [ 1, 1000, 1000, 4], maxCapacity: 1000000, maxPerSecond: 100000, targetPerSecond: 500000, minPrice: 1, excessConversionConstant: 2164043 };
+
+      jest.spyOn(platformvm, 'getFeeState').mockResolvedValue(feeState);
+      jest.spyOn(platformvm, 'getFeeConfig').mockResolvedValue(feeConfig);
       const txu1: UnsignedTx = await platformvm.buildExportTx(
         set,
         amount,
@@ -1356,8 +1376,11 @@ describe("PlatformVMAPI", (): void => {
         bintools.cb58Decode(blockchainID),
         amount,
         assetID,
+        feeState,
+        feeConfig,
         addrbuff3,
         addrbuff1,
+        true,
         addrbuff2,
         bintools.cb58Decode(
           Defaults.network[avalanche.getNetworkID()].X["blockchainID"]
@@ -1391,8 +1414,11 @@ describe("PlatformVMAPI", (): void => {
         bintools.cb58Decode(blockchainID),
         amount,
         assetID,
+        feeState,
+        feeConfig,
         addrbuff3,
         addrbuff1,
+        true,
         addrbuff2,
         undefined,
         platformvm.getTxFee(),
@@ -1433,6 +1459,9 @@ describe("PlatformVMAPI", (): void => {
       expect(tx4.toBuffer().toString("hex")).toBe(checkTx)
 
       serialzeit(tx1, "ExportTx")
+
+      const fee = calculateFee(txu1, feeConfig.weights, BigInt(feeState.price));
+      expect(fee).toBe(7045n)
     })
     /*
         test('buildAddSubnetValidatorTx', async (): Promise<void> => {
@@ -1470,83 +1499,6 @@ describe("PlatformVMAPI", (): void => {
 
         });
     */
-    test("buildAddDelegatorTx 1", async (): Promise<void> => {
-      const addrbuff1 = addrs1.map((a) => platformvm.parseAddress(a))
-      const addrbuff2 = addrs2.map((a) => platformvm.parseAddress(a))
-      const addrbuff3 = addrs3.map((a) => platformvm.parseAddress(a))
-      const amount: BN = Defaults.network[networkID]["P"].minDelegationStake
-
-      const locktime: BN = new BN(54321)
-      const threshold: number = 2
-
-      platformvm.setMinStake(
-        Defaults.network[networkID]["P"].minStake,
-        Defaults.network[networkID]["P"].minDelegationStake
-      )
-
-      const txu1: UnsignedTx = await platformvm.buildAddDelegatorTx(
-        set,
-        addrs3,
-        addrs1,
-        addrs2,
-        nodeID,
-        startTime,
-        endTime,
-        amount,
-        addrs3,
-        locktime,
-        threshold,
-        new UTF8Payload("hello world"),
-        UnixNow()
-      )
-
-      const txu2: UnsignedTx = set.buildAddDelegatorTx(
-        networkID,
-        bintools.cb58Decode(blockchainID),
-        assetID,
-        addrbuff3,
-        addrbuff1,
-        addrbuff2,
-        NodeIDStringToBuffer(nodeID),
-        startTime,
-        endTime,
-        amount,
-        locktime,
-        threshold,
-        addrbuff3,
-        new BN(0),
-        assetID,
-        new UTF8Payload("hello world").getPayload(),
-        UnixNow()
-      )
-      expect(txu2.toBuffer().toString("hex")).toBe(
-        txu1.toBuffer().toString("hex")
-      )
-      expect(txu2.toString()).toBe(txu1.toString())
-
-      const tx1: Tx = txu1.sign(platformvm.keyChain())
-      const checkTx: string = tx1.toBuffer().toString("hex")
-      const tx1obj: object = tx1.serialize("hex")
-      const tx1str: string = JSON.stringify(tx1obj)
-
-      const tx2newobj: object = JSON.parse(tx1str)
-      const tx2: Tx = new Tx()
-      tx2.deserialize(tx2newobj, "hex")
-
-      expect(tx2.toBuffer().toString("hex")).toBe(checkTx)
-
-      const tx3: Tx = txu1.sign(platformvm.keyChain())
-      const tx3obj: object = tx3.serialize(display)
-      const tx3str: string = JSON.stringify(tx3obj)
-
-      const tx4newobj: object = JSON.parse(tx3str)
-      const tx4: Tx = new Tx()
-      tx4.deserialize(tx4newobj, display)
-
-      expect(tx4.toBuffer().toString("hex")).toBe(checkTx)
-
-      serialzeit(tx1, "AddDelegatorTx")
-    })
 
     test("buildAddValidatorTx sort StakeableLockOuts 1", async (): Promise<void> => {
       // two UTXO. The 1st has a lesser stakeablelocktime and a greater amount of AVAX. The 2nd has a greater stakeablelocktime and a lesser amount of AVAX.
@@ -1628,7 +1580,7 @@ describe("PlatformVMAPI", (): void => {
       const utxoSet: UTXOSet = new UTXOSet()
       utxoSet.add(utxo1)
       utxoSet.add(utxo2)
-      const txu1: UnsignedTx = await platformvm.buildAddValidatorTx(
+      const txu1: UnsignedTx = await platformvm.buildAddPermissionlessValidatorTx(
         utxoSet,
         addrs3,
         addrs1,
@@ -1638,7 +1590,15 @@ describe("PlatformVMAPI", (): void => {
         endTime,
         stakeAmount,
         addrs3,
-        delegationFeeRate
+        delegationFeeRate,
+        bintools.cb58Decode("11111111111111111111111111111111LpoYY"),
+        new Signer(
+          PlatformVMConstants.SIGNERPRIMARYNETWORK,
+          new ProofOfPossession(
+            Buffer.from("98fa1d2734676a6a396920424920dd1bc56b01666431ce2ddfa78839bf41979236146e9f29d8b9508442edd6a8015ed5", "hex"),
+            Buffer.from("96be129c20af00923baa6fa4f0859cf5e479cd287cf4be078bbcf3c5cd39f9ffefabb83ac4a1ea6ca20c705afe3ce02a10d0bb5fc85b04846914ad41bfdfe49bbf9b252901c55ce2b8ccae81279c81e0d1e905ea7b859a941e3e36cc6c58272f", "hex")
+          )
+        )
       )
       const tx = txu1.getTransaction() as AddValidatorTx
       const ins: TransferableInput[] = tx.getIns()
@@ -1804,7 +1764,7 @@ describe("PlatformVMAPI", (): void => {
       const utxoSet: UTXOSet = new UTXOSet()
       utxoSet.add(utxo1)
       utxoSet.add(utxo2)
-      const txu1: UnsignedTx = await platformvm.buildAddValidatorTx(
+      const txu1: UnsignedTx = await platformvm.buildAddPermissionlessValidatorTx(
         utxoSet,
         addrs3,
         addrs1,
@@ -1814,7 +1774,15 @@ describe("PlatformVMAPI", (): void => {
         endTime,
         stakeAmount,
         addrs3,
-        delegationFeeRate
+        delegationFeeRate,
+        bintools.cb58Decode("11111111111111111111111111111111LpoYY"),
+        new Signer(
+          PlatformVMConstants.SIGNERPRIMARYNETWORK,
+          new ProofOfPossession(
+            Buffer.from("98fa1d2734676a6a396920424920dd1bc56b01666431ce2ddfa78839bf41979236146e9f29d8b9508442edd6a8015ed5", "hex"),
+            Buffer.from("96be129c20af00923baa6fa4f0859cf5e479cd287cf4be078bbcf3c5cd39f9ffefabb83ac4a1ea6ca20c705afe3ce02a10d0bb5fc85b04846914ad41bfdfe49bbf9b252901c55ce2b8ccae81279c81e0d1e905ea7b859a941e3e36cc6c58272f", "hex")
+          )
+        )
       )
       const tx = txu1.getTransaction() as AddValidatorTx
       const ins: TransferableInput[] = tx.getIns()
@@ -1996,7 +1964,7 @@ describe("PlatformVMAPI", (): void => {
       utxoSet.add(utxo0)
       utxoSet.add(utxo1)
       utxoSet.add(utxo2)
-      const txu1: UnsignedTx = await platformvm.buildAddValidatorTx(
+      const txu1: UnsignedTx = await platformvm.buildAddPermissionlessValidatorTx(
         utxoSet,
         addrs3,
         addrs1,
@@ -2006,7 +1974,15 @@ describe("PlatformVMAPI", (): void => {
         endTime,
         stakeAmount,
         addrs3,
-        delegationFeeRate
+        delegationFeeRate,
+        bintools.cb58Decode("11111111111111111111111111111111LpoYY"),
+        new Signer(
+          PlatformVMConstants.SIGNERPRIMARYNETWORK,
+          new ProofOfPossession(
+            Buffer.from("98fa1d2734676a6a396920424920dd1bc56b01666431ce2ddfa78839bf41979236146e9f29d8b9508442edd6a8015ed5", "hex"),
+            Buffer.from("96be129c20af00923baa6fa4f0859cf5e479cd287cf4be078bbcf3c5cd39f9ffefabb83ac4a1ea6ca20c705afe3ce02a10d0bb5fc85b04846914ad41bfdfe49bbf9b252901c55ce2b8ccae81279c81e0d1e905ea7b859a941e3e36cc6c58272f", "hex")
+          )
+        )
       )
       const tx = txu1.getTransaction() as AddValidatorTx
       const ins: TransferableInput[] = tx.getIns()
@@ -2101,7 +2077,7 @@ describe("PlatformVMAPI", (): void => {
         Defaults.network[networkID]["P"].minDelegationStake
       )
 
-      const txu1: UnsignedTx = await platformvm.buildAddValidatorTx(
+      const txu1: UnsignedTx = await platformvm.buildAddPermissionlessValidatorTx(
         set,
         addrs3,
         addrs1,
@@ -2112,13 +2088,21 @@ describe("PlatformVMAPI", (): void => {
         amount,
         addrs3,
         0.1334556,
+        bintools.cb58Decode("11111111111111111111111111111111LpoYY"),
+        new Signer(
+          PlatformVMConstants.SIGNERPRIMARYNETWORK,
+          new ProofOfPossession(
+            Buffer.from("98fa1d2734676a6a396920424920dd1bc56b01666431ce2ddfa78839bf41979236146e9f29d8b9508442edd6a8015ed5", "hex"),
+            Buffer.from("96be129c20af00923baa6fa4f0859cf5e479cd287cf4be078bbcf3c5cd39f9ffefabb83ac4a1ea6ca20c705afe3ce02a10d0bb5fc85b04846914ad41bfdfe49bbf9b252901c55ce2b8ccae81279c81e0d1e905ea7b859a941e3e36cc6c58272f", "hex")
+          )
+        ),
         locktime,
         threshold,
         new UTF8Payload("hello world"),
         UnixNow()
       )
 
-      const txu2: UnsignedTx = set.buildAddValidatorTx(
+      const txu2: UnsignedTx = set.buildAddPermissionlessValidatorTx(
         networkID,
         bintools.cb58Decode(blockchainID),
         assetID,
@@ -2136,7 +2120,18 @@ describe("PlatformVMAPI", (): void => {
         new BN(0),
         assetID,
         new UTF8Payload("hello world").getPayload(),
-        UnixNow()
+        UnixNow(),
+        PrimaryNetworkID,
+        new Signer(
+          PlatformVMConstants.SIGNERPRIMARYNETWORK,
+          new ProofOfPossession(
+            Buffer.from("98fa1d2734676a6a396920424920dd1bc56b01666431ce2ddfa78839bf41979236146e9f29d8b9508442edd6a8015ed5", "hex"),
+            Buffer.from("96be129c20af00923baa6fa4f0859cf5e479cd287cf4be078bbcf3c5cd39f9ffefabb83ac4a1ea6ca20c705afe3ce02a10d0bb5fc85b04846914ad41bfdfe49bbf9b252901c55ce2b8ccae81279c81e0d1e905ea7b859a941e3e36cc6c58272f", "hex")
+          )
+        ),
+        null,
+        null,
+        true
       )
       expect(txu2.toBuffer().toString("hex")).toBe(
         txu1.toBuffer().toString("hex")
@@ -2180,7 +2175,7 @@ describe("PlatformVMAPI", (): void => {
         Defaults.network[networkID]["P"].minDelegationStake
       )
 
-      const txu1: UnsignedTx = await platformvm.buildAddDelegatorTx(
+      const txu1: UnsignedTx = await platformvm.buildAddPermissionlessDelegatorTx(
         lset,
         addrs3,
         addrs1,
@@ -2190,13 +2185,14 @@ describe("PlatformVMAPI", (): void => {
         endTime,
         amount,
         addrs3,
+        PrimaryNetworkID,
         locktime,
         threshold,
         new UTF8Payload("hello world"),
         UnixNow()
       )
 
-      const txu2: UnsignedTx = lset.buildAddDelegatorTx(
+      const txu2: UnsignedTx = lset.buildAddPermissionlessDelegatorTx(
         networkID,
         bintools.cb58Decode(blockchainID),
         assetID,
@@ -2210,6 +2206,10 @@ describe("PlatformVMAPI", (): void => {
         locktime,
         threshold,
         addrbuff3,
+        PrimaryNetworkID,
+        feeState,
+        feeConfig,
+        true,
         new BN(0),
         assetID,
         new UTF8Payload("hello world").getPayload(),
@@ -2255,7 +2255,7 @@ describe("PlatformVMAPI", (): void => {
 
       platformvm.setMinStake(ONEAVAX.mul(new BN(25)), ONEAVAX.mul(new BN(25)))
 
-      const txu1: UnsignedTx = await platformvm.buildAddValidatorTx(
+      const txu1: UnsignedTx = await platformvm.buildAddPermissionlessValidatorTx(
         lset,
         addrs3,
         addrs1,
@@ -2266,13 +2266,21 @@ describe("PlatformVMAPI", (): void => {
         amount,
         addrs3,
         0.1334556,
+        bintools.cb58Decode("11111111111111111111111111111111LpoYY"),
+        new Signer(
+          PlatformVMConstants.SIGNERPRIMARYNETWORK,
+          new ProofOfPossession(
+            Buffer.from("98fa1d2734676a6a396920424920dd1bc56b01666431ce2ddfa78839bf41979236146e9f29d8b9508442edd6a8015ed5", "hex"),
+            Buffer.from("96be129c20af00923baa6fa4f0859cf5e479cd287cf4be078bbcf3c5cd39f9ffefabb83ac4a1ea6ca20c705afe3ce02a10d0bb5fc85b04846914ad41bfdfe49bbf9b252901c55ce2b8ccae81279c81e0d1e905ea7b859a941e3e36cc6c58272f", "hex")
+          )
+        ),
         locktime,
         threshold,
         new UTF8Payload("hello world"),
         UnixNow()
       )
 
-      const txu2: UnsignedTx = lset.buildAddValidatorTx(
+      const txu2: UnsignedTx = lset.buildAddPermissionlessValidatorTx(
         networkID,
         bintools.cb58Decode(blockchainID),
         assetID,
@@ -2290,7 +2298,18 @@ describe("PlatformVMAPI", (): void => {
         new BN(0),
         assetID,
         new UTF8Payload("hello world").getPayload(),
-        UnixNow()
+        UnixNow(),
+        bintools.cb58Decode("11111111111111111111111111111111LpoYY"),
+        new Signer(
+          PlatformVMConstants.SIGNERPRIMARYNETWORK,
+          new ProofOfPossession(
+            Buffer.from("98fa1d2734676a6a396920424920dd1bc56b01666431ce2ddfa78839bf41979236146e9f29d8b9508442edd6a8015ed5", "hex"),
+            Buffer.from("96be129c20af00923baa6fa4f0859cf5e479cd287cf4be078bbcf3c5cd39f9ffefabb83ac4a1ea6ca20c705afe3ce02a10d0bb5fc85b04846914ad41bfdfe49bbf9b252901c55ce2b8ccae81279c81e0d1e905ea7b859a941e3e36cc6c58272f", "hex")
+          )
+        ),
+        null,
+        null,
+        true
       )
       expect(txu2.toBuffer().toString("hex")).toBe(
         txu1.toBuffer().toString("hex")
@@ -2379,7 +2398,7 @@ describe("PlatformVMAPI", (): void => {
       dummySet.add(ulu)
       dummySet.add(lu)
 
-      const txu1: UnsignedTx = await platformvm.buildAddValidatorTx(
+      const txu1: UnsignedTx = await platformvm.buildAddPermissionlessValidatorTx(
         dummySet,
         addrs3,
         addrs1,
@@ -2390,6 +2409,14 @@ describe("PlatformVMAPI", (): void => {
         amount,
         addrs3,
         0.1334556,
+        bintools.cb58Decode("11111111111111111111111111111111LpoYY"),
+        new Signer(
+          PlatformVMConstants.SIGNERPRIMARYNETWORK,
+          new ProofOfPossession(
+            Buffer.from("98fa1d2734676a6a396920424920dd1bc56b01666431ce2ddfa78839bf41979236146e9f29d8b9508442edd6a8015ed5", "hex"),
+            Buffer.from("96be129c20af00923baa6fa4f0859cf5e479cd287cf4be078bbcf3c5cd39f9ffefabb83ac4a1ea6ca20c705afe3ce02a10d0bb5fc85b04846914ad41bfdfe49bbf9b252901c55ce2b8ccae81279c81e0d1e905ea7b859a941e3e36cc6c58272f", "hex")
+          )
+        ),
         locktime,
         threshold,
         new UTF8Payload("hello world"),

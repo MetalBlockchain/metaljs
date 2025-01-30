@@ -7,6 +7,7 @@ import BN from "bn.js"
 import { PersistanceOptions } from "../../utils/persistenceoptions"
 import { TransferableOutput } from "."
 import { UTXOSet } from "../platformvm/utxos"
+import { Dimensions } from "./dynamicfee/dimensions"
 
 export interface GetStakeParams {
   addresses: string[]
@@ -201,4 +202,20 @@ export interface GetMaxStakeAmountParams {
   nodeID: string
   startTime: BN
   endTime: BN
+}
+
+export interface FeeState {
+  capacity: number;
+  excess: number;
+  price: number;
+  timestamp: string;
+}
+
+export interface FeeConfig {
+  weights: Dimensions;
+  maxCapacity: number;
+  maxPerSecond: number;
+  targetPerSecond: number;
+  minPrice: number;
+  excessConversionConstant: number;
 }

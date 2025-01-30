@@ -35,6 +35,8 @@ export class PlatformVMConstants {
 
   static ADDDELEGATORTX: number = 14
 
+  static ADDPERMISSIONLESSDELEGATORTX: number = 26
+
   static CREATECHAINTX: number = 15
 
   static CREATESUBNETTX: number = 16

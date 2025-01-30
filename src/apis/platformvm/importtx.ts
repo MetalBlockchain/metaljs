@@ -14,6 +14,7 @@ import { BaseTx } from "./basetx"
 import { DefaultNetworkID } from "../../utils/constants"
 import { Serialization, SerializedEncoding } from "../../utils/serialization"
 import { ChainIdError, TransferableInputError } from "../../utils/errors"
+import BN from "bn.js"
 
 /**
  * @ignore

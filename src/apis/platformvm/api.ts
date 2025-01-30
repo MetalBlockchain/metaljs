@@ -58,12 +58,16 @@ import {
   GetTxStatusParams,
   GetTxStatusResponse,
   GetMinStakeResponse,
-  GetMaxStakeAmountParams
+  GetMaxStakeAmountParams,
+  FeeState,
+  FeeConfig
 } from "./interfaces"
 import { TransferableOutput } from "./outputs"
 import { Serialization, SerializedType } from "../../utils"
 import { Signer, SubnetAuth } from "."
 import { GenesisData } from "../avm"
+import { InfoAPI } from "../info"
+import { UpgradesResponse } from "../info/interfaces"
 
 /**
  * @ignore
@@ -97,6 +101,10 @@ export class PlatformVMAPI extends JRPCAPI {
   protected minValidatorStake: BN = undefined
 
   protected minDelegatorStake: BN = undefined
+
+  protected feeConfig: FeeConfig = undefined
+
+  protected isEtna: boolean = undefined
 
   /**
    * Gets the alias for the blockchainID if it exists, otherwise returns `undefined`.
@@ -349,6 +357,7 @@ export class PlatformVMAPI extends JRPCAPI {
       ? outTotal
       : utx.getOutputTotal(avaxAssetID)
     const fee: BN = utx.getBurn(avaxAssetID)
+    console.log("Fee: " + fee.toString(10))
     if (fee.lte(ONEAVAX.mul(new BN(10))) || fee.lte(outputTotal)) {
       return true
     } else {
@@ -1360,7 +1369,8 @@ export class PlatformVMAPI extends JRPCAPI {
     }
 
     const atomics: UTXO[] = atomicUTXOs.getAllUTXOs()
-
+    const feeState: FeeState = await this.getFeeState();
+    const feeConfig: FeeConfig = await this.getFeeConfig();
     const builtUnsignedTx: UnsignedTx = utxoset.buildImportTx(
       this.core.getNetworkID(),
       bintools.cb58Decode(this.blockchainID),
@@ -1368,13 +1378,16 @@ export class PlatformVMAPI extends JRPCAPI {
       from,
       change,
       atomics,
+      feeState,
+      feeConfig,
+      await this.isEtnaEnabled(),
       sourceChain,
       this.getTxFee(),
       avaxAssetID,
       memo,
       asOf,
       locktime,
-      threshold
+      threshold,
     )
 
     if (!(await this.checkGooseEgg(builtUnsignedTx))) {
@@ -1470,8 +1483,11 @@ export class PlatformVMAPI extends JRPCAPI {
       bintools.cb58Decode(this.blockchainID),
       amount,
       avaxAssetID,
+      await this.getFeeState(),
+      await this.getFeeConfig(),
       to,
       from,
+      await this.isEtnaEnabled(),
       change,
       destinationChain,
       this.getTxFee(),
@@ -1479,7 +1495,7 @@ export class PlatformVMAPI extends JRPCAPI {
       memo,
       asOf,
       locktime,
-      threshold
+      threshold,
     )
 
     if (!(await this.checkGooseEgg(builtUnsignedTx))) {
@@ -1569,8 +1585,8 @@ export class PlatformVMAPI extends JRPCAPI {
   }
 
   /**
-   * Helper function which creates an unsigned [[AddDelegatorTx]]. For more granular control, you may create your own
-   * [[UnsignedTx]] manually and import the [[AddDelegatorTx]] class directly.
+   * Helper function which creates an unsigned [[AddPermissionlessDelegatorTx]]. For more granular control, you may create your own
+   * [[UnsignedTx]] manually and import the [[AddPermissionlessDelegatorTx]] class directly.
    *
    * @param utxoset A set of UTXOs that the transaction is built on
    * @param toAddresses An array of addresses as {@link https://github.com/feross/buffer|Buffer} who received the staked tokens at the end of the staking period
@@ -1588,7 +1604,7 @@ export class PlatformVMAPI extends JRPCAPI {
    *
    * @returns An unsigned transaction created from the passed in parameters.
    */
-  buildAddDelegatorTx = async (
+  buildAddPermissionlessDelegatorTx = async (
     utxoset: UTXOSet,
     toAddresses: string[],
     fromAddresses: string[],
@@ -1598,26 +1614,27 @@ export class PlatformVMAPI extends JRPCAPI {
     endTime: BN,
     stakeAmount: BN,
     rewardAddresses: string[],
+    subnetID: string | Buffer,
     rewardLocktime: BN = new BN(0),
     rewardThreshold: number = 1,
     memo: PayloadBase | Buffer = undefined,
-    asOf: BN = UnixNow()
+    asOf: BN = UnixNow(),
   ): Promise<UnsignedTx> => {
     const to: Buffer[] = this._cleanAddressArray(
       toAddresses,
-      "buildAddDelegatorTx"
+      "buildAddPermissionlessDelegatorTx"
     ).map((a: string): Buffer => bintools.stringToAddress(a))
     const from: Buffer[] = this._cleanAddressArray(
       fromAddresses,
-      "buildAddDelegatorTx"
+      "buildAddPermissionlessDelegatorTx"
     ).map((a: string): Buffer => bintools.stringToAddress(a))
     const change: Buffer[] = this._cleanAddressArray(
       changeAddresses,
-      "buildAddDelegatorTx"
+      "buildAddPermissionlessDelegatorTx"
     ).map((a: string): Buffer => bintools.stringToAddress(a))
     const rewards: Buffer[] = this._cleanAddressArray(
       rewardAddresses,
-      "buildAddDelegatorTx"
+      "buildAddPermissionlessDelegatorTx"
     ).map((a: string): Buffer => bintools.stringToAddress(a))
 
     if (memo instanceof PayloadBase) {
@@ -1627,7 +1644,7 @@ export class PlatformVMAPI extends JRPCAPI {
     const minStake: BN = (await this.getMinStake())["minDelegatorStake"]
     if (stakeAmount.lt(minStake)) {
       throw new StakeError(
-        "PlatformVMAPI.buildAddDelegatorTx -- stake amount must be at least " +
+        "PlatformVMAPI.buildAddPermissionlessDelegatorTx -- stake amount must be at least " +
           minStake.toString(10)
       )
     }
@@ -1637,11 +1654,11 @@ export class PlatformVMAPI extends JRPCAPI {
     const now: BN = UnixNow()
     if (startTime.lt(now) || endTime.lte(startTime)) {
       throw new TimeError(
-        "PlatformVMAPI.buildAddDelegatorTx -- startTime must be in the future and endTime must come after startTime"
+        "PlatformVMAPI.buildAddPermissionlessDelegatorTx -- startTime must be in the future and endTime must come after startTime"
       )
     }
 
-    const builtUnsignedTx: UnsignedTx = utxoset.buildAddDelegatorTx(
+    const builtUnsignedTx: UnsignedTx = utxoset.buildAddPermissionlessDelegatorTx(
       this.core.getNetworkID(),
       bintools.cb58Decode(this.blockchainID),
       avaxAssetID,
@@ -1655,124 +1672,15 @@ export class PlatformVMAPI extends JRPCAPI {
       rewardLocktime,
       rewardThreshold,
       rewards,
+      subnetID,
+      await this.getFeeState(),
+      await this.getFeeConfig(),
+      await this.isEtnaEnabled(),
       new BN(0),
       avaxAssetID,
       memo,
-      asOf
-    )
-
-    if (!(await this.checkGooseEgg(builtUnsignedTx))) {
-      /* istanbul ignore next */
-      throw new GooseEggCheckError("Failed Goose Egg Check")
-    }
-
-    return builtUnsignedTx
-  }
-
-  /**
-   * Helper function which creates an unsigned [[AddValidatorTx]]. For more granular control, you may create your own
-   * [[UnsignedTx]] manually and import the [[AddValidatorTx]] class directly.
-   *
-   * @param utxoset A set of UTXOs that the transaction is built on
-   * @param toAddresses An array of addresses as {@link https://github.com/feross/buffer|Buffer} who received the staked tokens at the end of the staking period
-   * @param fromAddresses An array of addresses as {@link https://github.com/feross/buffer|Buffer} who own the staking UTXOs the fees in AVAX
-   * @param changeAddresses An array of addresses as {@link https://github.com/feross/buffer|Buffer} who gets the change leftover from the fee payment
-   * @param nodeID The node ID of the validator being added.
-   * @param startTime The Unix time when the validator starts validating the Primary Network.
-   * @param endTime The Unix time when the validator stops validating the Primary Network (and staked AVAX is returned).
-   * @param stakeAmount The amount being delegated as a {@link https://github.com/indutny/bn.js/|BN}
-   * @param rewardAddresses The addresses which will recieve the rewards from the delegated stake.
-   * @param delegationFee A number for the percentage of reward to be given to the validator when someone delegates to them. Must be between 0 and 100.
-   * @param rewardLocktime Optional. The locktime field created in the resulting reward outputs
-   * @param rewardThreshold Opional. The number of signatures required to spend the funds in the resultant reward UTXO. Default 1.
-   * @param memo Optional contains arbitrary bytes, up to 256 bytes
-   * @param asOf Optional. The timestamp to verify the transaction against as a {@link https://github.com/indutny/bn.js/|BN}
-   *
-   * @returns An unsigned transaction created from the passed in parameters.
-   */
-  buildAddValidatorTx = async (
-    utxoset: UTXOSet,
-    toAddresses: string[],
-    fromAddresses: string[],
-    changeAddresses: string[],
-    nodeID: string,
-    startTime: BN,
-    endTime: BN,
-    stakeAmount: BN,
-    rewardAddresses: string[],
-    delegationFee: number,
-    rewardLocktime: BN = new BN(0),
-    rewardThreshold: number = 1,
-    memo: PayloadBase | Buffer = undefined,
-    asOf: BN = UnixNow()
-  ): Promise<UnsignedTx> => {
-    const to: Buffer[] = this._cleanAddressArray(
-      toAddresses,
-      "buildAddValidatorTx"
-    ).map((a: string): Buffer => bintools.stringToAddress(a))
-    const from: Buffer[] = this._cleanAddressArray(
-      fromAddresses,
-      "buildAddValidatorTx"
-    ).map((a: string): Buffer => bintools.stringToAddress(a))
-    const change: Buffer[] = this._cleanAddressArray(
-      changeAddresses,
-      "buildAddValidatorTx"
-    ).map((a: string): Buffer => bintools.stringToAddress(a))
-    const rewards: Buffer[] = this._cleanAddressArray(
-      rewardAddresses,
-      "buildAddValidatorTx"
-    ).map((a: string): Buffer => bintools.stringToAddress(a))
-
-    if (memo instanceof PayloadBase) {
-      memo = memo.getPayload()
-    }
-
-    const minStake: BN = (await this.getMinStake())["minValidatorStake"]
-    if (stakeAmount.lt(minStake)) {
-      throw new StakeError(
-        "PlatformVMAPI.buildAddValidatorTx -- stake amount must be at least " +
-          minStake.toString(10)
-      )
-    }
-
-    if (
-      typeof delegationFee !== "number" ||
-      delegationFee > 100 ||
-      delegationFee < 0
-    ) {
-      throw new DelegationFeeError(
-        "PlatformVMAPI.buildAddValidatorTx -- delegationFee must be a number between 0 and 100"
-      )
-    }
-
-    const avaxAssetID: Buffer = await this.getAVAXAssetID()
-
-    const now: BN = UnixNow()
-    if (startTime.lt(now) || endTime.lte(startTime)) {
-      throw new TimeError(
-        "PlatformVMAPI.buildAddValidatorTx -- startTime must be in the future and endTime must come after startTime"
-      )
-    }
-
-    const builtUnsignedTx: UnsignedTx = utxoset.buildAddValidatorTx(
-      this.core.getNetworkID(),
-      bintools.cb58Decode(this.blockchainID),
-      avaxAssetID,
-      to,
-      from,
-      change,
-      NodeIDStringToBuffer(nodeID),
-      startTime,
-      endTime,
-      stakeAmount,
-      rewardLocktime,
-      rewardThreshold,
-      rewards,
-      delegationFee,
-      new BN(0),
-      avaxAssetID,
-      memo,
-      asOf
+      asOf,
+      undefined,
     )
 
     if (!(await this.checkGooseEgg(builtUnsignedTx))) {
@@ -1794,12 +1702,12 @@ export class PlatformVMAPI extends JRPCAPI {
     stakeAmount: BN,
     rewardAddresses: string[],
     delegationFee: number,
+    subnetID: string | Buffer,
+    signer: Signer,
     rewardLocktime: BN = new BN(0),
     rewardThreshold: number = 1,
     memo: PayloadBase | Buffer = undefined,
     asOf: BN = UnixNow(),
-    subnetID: string | Buffer,
-    signer: Signer
   ): Promise<UnsignedTx> => {
     const to: Buffer[] = this._cleanAddressArray(
       toAddresses,
@@ -1869,7 +1777,10 @@ export class PlatformVMAPI extends JRPCAPI {
       memo,
       asOf,
       subnetID,
-      signer
+      signer,
+      await this.getFeeState(),
+      await this.getFeeConfig(),
+      await this.isEtnaEnabled()
     )
 
     if (!(await this.checkGooseEgg(builtUnsignedTx))) {
@@ -2105,5 +2016,37 @@ export class PlatformVMAPI extends JRPCAPI {
       params
     )
     return response.data.result
+  }
+
+  /**
+   * @returns the current fee state on chain.
+   */
+  getFeeState = async (): Promise<FeeState> => {
+    const response: RequestResponseData = await this.callMethod(
+      "platform.getFeeState"
+    )
+    return response.data.result
+  }
+
+  /**
+   * @returns the current fee state on chain.
+   */
+  getFeeConfig = async (): Promise<FeeConfig> => {
+    if (typeof this.feeConfig === "undefined") {
+      const response: RequestResponseData = await this.callMethod(
+        "platform.getFeeConfig"
+      )
+      this.feeConfig = response.data.result
+    }
+    return this.feeConfig
+  }
+
+  isEtnaEnabled = async (): Promise<boolean> => {
+    if (typeof this.isEtna === "undefined") {
+      const infoApi: InfoAPI = new InfoAPI(this.core)
+      const response: UpgradesResponse = await infoApi.upgrades()
+      this.isEtna = new Date() > new Date(response.etnaTime);
+    }
+    return this.isEtna
   }
 }

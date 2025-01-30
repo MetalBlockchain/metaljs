@@ -34,7 +34,7 @@ import {
   AssetAmount
 } from "../../common/assetamount"
 import { Output } from "../../common/output"
-import { AddDelegatorTx, AddPermissionlessValidatorTx, AddValidatorTx, Signer } from "./validationtx"
+import { AddDelegatorTx, AddPermissionlessDelegatorTx, AddPermissionlessValidatorTx, AddValidatorTx, Signer } from "./validationtx"
 import { CreateSubnetTx } from "./createsubnettx"
 import { Serialization, SerializedEncoding } from "../../utils/serialization"
 import {
@@ -45,9 +45,13 @@ import {
   FeeAssetError,
   TimeError
 } from "../../utils/errors"
-import { CreateChainTx } from "."
+import { CreateChainTx, FeeConfig, FeeState } from "."
 import { GenesisData } from "../avm"
 import { AddSubnetValidatorTx } from "../platformvm/addsubnetvalidatortx"
+import { getBytesComplexity, getInputComplexity, getOutputComplexity } from "./dynamicfee/complexity"
+import { addDimensions } from "./dynamicfee/dimensions"
+import { INTRINSIC_IMPORT_TX_COMPLEXITIES } from "./dynamicfee/constants"
+import { calculateFee } from "./dynamicfee/calculator"
 
 /**
  * @ignore
@@ -335,8 +339,7 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
 
       let locked: boolean = false
       if (amountOutput instanceof StakeableLockOut) {
-        const stakeableOutput: StakeableLockOut =
-          amountOutput as StakeableLockOut
+        const stakeableOutput: StakeableLockOut = amountOutput as StakeableLockOut
         const stakeableLocktime: BN = stakeableOutput.getStakeableLocktime()
 
         if (stakeableLocktime.gt(asOf)) {
@@ -417,20 +420,17 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
       // funds.
       const change: BN = assetAmount.getChange()
       // isStakeableLockChange is if the change is locked or not.
-      const isStakeableLockChange: boolean =
-        assetAmount.getStakeableLockChange()
+      const isStakeableLockChange: boolean = assetAmount.getStakeableLockChange()
       // lockedChange is the amount of locked change that should be returned to
       // the sender
       const lockedChange: BN = isStakeableLockChange ? change : zero.clone()
 
       const assetID: Buffer = assetAmount.getAssetID()
       const assetKey: string = assetAmount.getAssetIDString()
-      const lockedOutputs: StakeableLockOut[] =
-        outs[`${assetKey}`].lockedStakeable
+      const lockedOutputs: StakeableLockOut[] = outs[`${assetKey}`].lockedStakeable
       lockedOutputs.forEach((lockedOutput: StakeableLockOut, i: number) => {
         const stakeableLocktime: BN = lockedOutput.getStakeableLocktime()
-        const parseableOutput: ParseableOutput =
-          lockedOutput.getTransferableOutput()
+        const parseableOutput: ParseableOutput = lockedOutput.getTransferableOutput()
 
         // We know that parseableOutput contains an AmountOutput because the
         // first loop filters for fungible assets.
@@ -660,13 +660,16 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
     fromAddresses: Buffer[],
     changeAddresses: Buffer[],
     atomics: UTXO[],
+    feeState: FeeState,
+    feeConfig: FeeConfig,
+    isEtna: boolean,
     sourceChain: Buffer = undefined,
     fee: BN = undefined,
     feeAssetID: Buffer = undefined,
     memo: Buffer = undefined,
     asOf: BN = UnixNow(),
     locktime: BN = new BN(0),
-    threshold: number = 1
+    threshold: number = 1,
   ): UnsignedTx => {
     const zero: BN = new BN(0)
     let ins: TransferableInput[] = []
@@ -773,7 +776,37 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
       sourceChain,
       importIns
     )
-    return new UnsignedTx(importTx)
+    const unsigned: UnsignedTx = new UnsignedTx(importTx)
+
+    if(isEtna) {
+      // calculate required fee
+      const actualFee = new BN(calculateFee(unsigned, feeConfig.weights, BigInt(feeState.price)).toString(10));
+
+      // if fee doesn't match then we need to recalculate
+      if (!actualFee.eq(fee)) {
+        console.log(`fee doesn't match, required ${actualFee.toString(10)}, fee ${fee.toString(10)}`)
+        return this.buildImportTx(
+          networkID,
+          blockchainID,
+          toAddresses,
+          fromAddresses,
+          changeAddresses,
+          atomics,
+          feeState,
+          feeConfig,
+          isEtna,
+          sourceChain,
+          actualFee,
+          feeAssetID,
+          memo,
+          asOf,
+          locktime,
+          threshold,
+        )
+      }
+    }
+
+    return unsigned
   }
 
   /**
@@ -802,8 +835,11 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
     blockchainID: Buffer,
     amount: BN,
     avaxAssetID: Buffer, // TODO: rename this to amountAssetID
+    feeState: FeeState,
+    feeConfig: FeeConfig,
     toAddresses: Buffer[],
     fromAddresses: Buffer[],
+    isEtna: boolean,
     changeAddresses: Buffer[] = undefined,
     destinationChain: Buffer = undefined,
     fee: BN = undefined,
@@ -811,7 +847,7 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
     memo: Buffer = undefined,
     asOf: BN = UnixNow(),
     locktime: BN = new BN(0),
-    threshold: number = 1
+    threshold: number = 1,
   ): UnsignedTx => {
     let ins: TransferableInput[] = []
     let outs: TransferableOutput[] = []
@@ -879,8 +915,38 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
       destinationChain,
       exportouts
     )
+    const unsigned: UnsignedTx = new UnsignedTx(exportTx)
 
-    return new UnsignedTx(exportTx)
+    if(isEtna) {
+      // calculate required fee
+      const actualFee = new BN(calculateFee(unsigned, feeConfig.weights, BigInt(feeState.price)).toString(10));
+
+      // if fee doesn't match then we need to recalculate
+      if (!actualFee.eq(fee)) {
+        console.log(`fee doesn't match, required ${actualFee.toString(10)}, fee ${fee.toString(10)}`)
+        return this.buildExportTx(
+          networkID,
+          blockchainID,
+          amount,
+          avaxAssetID,
+          feeState,
+          feeConfig,
+          toAddresses,
+          fromAddresses,
+          isEtna,
+          changeAddresses,
+          destinationChain,
+          actualFee,
+          feeAssetID,
+          memo,
+          asOf,
+          locktime,
+          threshold,
+        )
+      }
+    }
+
+    return unsigned
   }
 
   /**
@@ -969,7 +1035,7 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
   }
 
   /**
-   * Class representing an unsigned [[AddDelegatorTx]] transaction.
+   * Class representing an unsigned [[AddPermissionlessDelegatorTx]] transaction.
    *
    * @param networkID Networkid, [[DefaultNetworkID]]
    * @param blockchainID Blockchainid, default undefined
@@ -992,7 +1058,7 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
    *
    * @returns An unsigned transaction created from the passed in parameters.
    */
-  buildAddDelegatorTx = (
+  buildAddPermissionlessDelegatorTx = (
     networkID: number = DefaultNetworkID,
     blockchainID: Buffer,
     avaxAssetID: Buffer,
@@ -1006,16 +1072,20 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
     rewardLocktime: BN,
     rewardThreshold: number,
     rewardAddresses: Buffer[],
+    subnetID: string | Buffer,
+    feeState: FeeState,
+    feeConfig: FeeConfig,
+    isEtna: boolean,
     fee: BN = undefined,
     feeAssetID: Buffer = undefined,
     memo: Buffer = undefined,
     asOf: BN = UnixNow(),
-    changeThreshold: number = 1
+    changeThreshold: number = 1,
   ): UnsignedTx => {
     if (rewardThreshold > rewardAddresses.length) {
       /* istanbul ignore next */
       throw new ThresholdError(
-        "Error - UTXOSet.buildAddDelegatorTx: reward threshold is greater than number of addresses"
+        "Error - UTXOSet.buildAddPermissionlessDelegatorTx: reward threshold is greater than number of addresses"
       )
     }
 
@@ -1031,7 +1101,7 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
     const now: BN = UnixNow()
     if (startTime.lt(now) || endTime.lte(startTime)) {
       throw new TimeError(
-        "UTXOSet.buildAddDelegatorTx -- startTime must be in the future and endTime must come after startTime"
+        "UTXOSet.buildAddPermissionlessDelegatorTx -- startTime must be in the future and endTime must come after startTime"
       )
     }
 
@@ -1070,121 +1140,7 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
       rewardThreshold
     )
 
-    const UTx: AddDelegatorTx = new AddDelegatorTx(
-      networkID,
-      blockchainID,
-      outs,
-      ins,
-      memo,
-      nodeID,
-      startTime,
-      endTime,
-      stakeAmount,
-      stakeOuts,
-      new ParseableOutput(rewardOutputOwners)
-    )
-    return new UnsignedTx(UTx)
-  }
-
-  /**
-   * Class representing an unsigned [[AddValidatorTx]] transaction.
-   *
-   * @param networkID NetworkID, [[DefaultNetworkID]]
-   * @param blockchainID BlockchainID, default undefined
-   * @param avaxAssetID {@link https://github.com/feross/buffer|Buffer} of the asset ID for AVAX
-   * @param toAddresses An array of addresses as {@link https://github.com/feross/buffer|Buffer} recieves the stake at the end of the staking period
-   * @param fromAddresses An array of addresses as {@link https://github.com/feross/buffer|Buffer} who pays the fees and the stake
-   * @param changeAddresses An array of addresses as {@link https://github.com/feross/buffer|Buffer} who gets the change leftover from the staking payment
-   * @param nodeID The node ID of the validator being added.
-   * @param startTime The Unix time when the validator starts validating the Primary Network.
-   * @param endTime The Unix time when the validator stops validating the Primary Network (and staked AVAX is returned).
-   * @param stakeAmount A {@link https://github.com/indutny/bn.js/|BN} for the amount of stake to be delegated in nAVAX.
-   * @param rewardLocktime The locktime field created in the resulting reward outputs
-   * @param rewardThreshold The number of signatures required to spend the funds in the resultant reward UTXO
-   * @param rewardAddresses The addresses the validator reward goes.
-   * @param delegationFee A number for the percentage of reward to be given to the validator when someone delegates to them. Must be between 0 and 100.
-   * @param minStake A {@link https://github.com/indutny/bn.js/|BN} representing the minimum stake required to validate on this network.
-   * @param fee Optional. The amount of fees to burn in its smallest denomination, represented as {@link https://github.com/indutny/bn.js/|BN}
-   * @param feeAssetID Optional. The assetID of the fees being burned.
-   * @param memo Optional contains arbitrary bytes, up to 256 bytes
-   * @param asOf Optional. The timestamp to verify the transaction against as a {@link https://github.com/indutny/bn.js/|BN}
-   *
-   * @returns An unsigned transaction created from the passed in parameters.
-   */
-  buildAddValidatorTx = (
-    networkID: number = DefaultNetworkID,
-    blockchainID: Buffer,
-    avaxAssetID: Buffer,
-    toAddresses: Buffer[],
-    fromAddresses: Buffer[],
-    changeAddresses: Buffer[],
-    nodeID: Buffer,
-    startTime: BN,
-    endTime: BN,
-    stakeAmount: BN,
-    rewardLocktime: BN,
-    rewardThreshold: number,
-    rewardAddresses: Buffer[],
-    delegationFee: number,
-    fee: BN = undefined,
-    feeAssetID: Buffer = undefined,
-    memo: Buffer = undefined,
-    asOf: BN = UnixNow()
-  ): UnsignedTx => {
-    let ins: TransferableInput[] = []
-    let outs: TransferableOutput[] = []
-    let stakeOuts: TransferableOutput[] = []
-
-    const zero: BN = new BN(0)
-    const now: BN = UnixNow()
-    if (startTime.lt(now) || endTime.lte(startTime)) {
-      throw new TimeError(
-        "UTXOSet.buildAddValidatorTx -- startTime must be in the future and endTime must come after startTime"
-      )
-    }
-
-    if (delegationFee > 100 || delegationFee < 0) {
-      throw new TimeError(
-        "UTXOSet.buildAddValidatorTx -- startTime must be in the range of 0 to 100, inclusively"
-      )
-    }
-
-    const aad: AssetAmountDestination = new AssetAmountDestination(
-      toAddresses,
-      fromAddresses,
-      changeAddresses
-    )
-    if (avaxAssetID.toString("hex") === feeAssetID.toString("hex")) {
-      aad.addAssetAmount(avaxAssetID, stakeAmount, fee)
-    } else {
-      aad.addAssetAmount(avaxAssetID, stakeAmount, zero)
-      if (this._feeCheck(fee, feeAssetID)) {
-        aad.addAssetAmount(feeAssetID, zero, fee)
-      }
-    }
-
-    const minSpendableErr: Error = this.getMinimumSpendable(
-      aad,
-      asOf,
-      undefined,
-      undefined,
-      true
-    )
-    if (typeof minSpendableErr === "undefined") {
-      ins = aad.getInputs()
-      outs = aad.getChangeOutputs()
-      stakeOuts = aad.getOutputs()
-    } else {
-      throw minSpendableErr
-    }
-
-    const rewardOutputOwners: SECPOwnerOutput = new SECPOwnerOutput(
-      rewardAddresses,
-      rewardLocktime,
-      rewardThreshold
-    )
-
-    const UTx: AddValidatorTx = new AddValidatorTx(
+    const UTx: AddPermissionlessDelegatorTx = new AddPermissionlessDelegatorTx(
       networkID,
       blockchainID,
       outs,
@@ -1196,9 +1152,45 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
       stakeAmount,
       stakeOuts,
       new ParseableOutput(rewardOutputOwners),
-      delegationFee
+      subnetID
     )
-    return new UnsignedTx(UTx)
+    const unsigned: UnsignedTx = new UnsignedTx(UTx)
+
+    if (isEtna) {
+      // calculate required fee
+      const actualFee = new BN(calculateFee(unsigned, feeConfig.weights, BigInt(feeState.price)).toString(10));
+
+      // if fee doesn't match then we need to recalculate
+      if (!actualFee.eq(fee)) {
+        console.log(`fee doesn't match, required ${actualFee.toString(10)}, fee ${fee.toString(10)}`)
+        return this.buildAddPermissionlessDelegatorTx(
+          networkID,
+          blockchainID,
+          avaxAssetID,
+          toAddresses,
+          fromAddresses,
+          changeAddresses,
+          nodeID,
+          startTime,
+          endTime,
+          stakeAmount,
+          rewardLocktime,
+          rewardThreshold,
+          rewardAddresses,
+          subnetID,
+          feeState,
+          feeConfig,
+          isEtna,
+          actualFee,
+          feeAssetID,
+          memo,
+          asOf,
+          changeThreshold
+        )
+      }
+    }
+
+    return unsigned
   }
 
   buildAddPermissionlessValidatorTx = (
@@ -1221,7 +1213,10 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
     memo: Buffer = undefined,
     asOf: BN = UnixNow(),
     subnetID: string | Buffer,
-    signer: Signer
+    signer: Signer,
+    feeState: FeeState,
+    feeConfig: FeeConfig,
+    isEtna: boolean
   ): UnsignedTx => {
     let ins: TransferableInput[] = []
     let outs: TransferableOutput[] = []
@@ -1293,7 +1288,44 @@ export class UTXOSet extends StandardUTXOSet<UTXO> {
       new ParseableOutput(rewardOutputOwners),
       delegationFee
     )
-    return new UnsignedTx(UTx)
+    const unsigned: UnsignedTx = new UnsignedTx(UTx)
+
+    // calculate required fee
+    if(isEtna) {
+      const actualFee = new BN(calculateFee(unsigned, feeConfig.weights, BigInt(feeState.price)).toString(10));
+
+      // if fee doesn't match then we need to recalculate
+      if (!actualFee.eq(fee)) {
+        console.log(`fee doesn't match, required ${actualFee.toString(10)}, fee ${fee.toString(10)}`)
+        return this.buildAddPermissionlessValidatorTx(
+          networkID,
+          blockchainID,
+          avaxAssetID,
+          toAddresses,
+          fromAddresses,
+          changeAddresses,
+          nodeID,
+          startTime,
+          endTime,
+          stakeAmount,
+          rewardLocktime,
+          rewardThreshold,
+          rewardAddresses,
+          delegationFee,
+          actualFee,
+          feeAssetID,
+          memo,
+          asOf,
+          subnetID,
+          signer,
+          feeState,
+          feeConfig,
+          isEtna
+        )
+      }
+    }
+
+    return unsigned
   }
 
   /**

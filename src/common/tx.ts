@@ -301,8 +301,7 @@ export abstract class StandardUnsignedTx<
    * Returns the outputTotal as a BN
    */
   getOutputTotal(assetID: Buffer): BN {
-    const outs: StandardTransferableOutput[] =
-      this.getTransaction().getTotalOuts()
+    const outs: StandardTransferableOutput[] = this.getTransaction().getTotalOuts()
     const aIDHex: string = assetID.toString("hex")
     let total: BN = new BN(0)
 

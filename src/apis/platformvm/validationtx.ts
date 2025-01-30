@@ -15,6 +15,8 @@ import { bufferToNodeIDString } from "../../utils/helperfunctions"
 import { AmountOutput, ParseableOutput } from "./outputs"
 import { Serialization, SerializedEncoding } from "../../utils/serialization"
 import { DelegationFeeError } from "../../utils/errors"
+import { ethers } from "ethers"
+import { PublicKey, Signature, publicKeyFromBytes, signatureFromBytes, verifyProofOfPossession } from "../../utils/bls"
 
 /**
  * @ignore
@@ -412,6 +414,196 @@ export class AddDelegatorTx extends WeightedValidatorTx {
   }
 }
 
+/**
+ * Class representing an unsigned AddPermissionlessDelegatorTx transaction.
+ */
+export class AddPermissionlessDelegatorTx extends WeightedValidatorTx {
+  protected _typeName = "AddPermissionlessDelegatorTx"
+  protected _typeID = PlatformVMConstants.ADDPERMISSIONLESSDELEGATORTX
+
+  serialize(encoding: SerializedEncoding = "hex"): object {
+    let fields: object = super.serialize(encoding)
+    return {
+      ...fields,
+      stakeOuts: this.stakeOuts.map((s) => s.serialize(encoding)),
+      rewardOwners: this.rewardOwners.serialize(encoding)
+    }
+  }
+  deserialize(fields: object, encoding: SerializedEncoding = "hex") {
+    super.deserialize(fields, encoding)
+    this.stakeOuts = fields["stakeOuts"].map((s: object) => {
+      let xferout: TransferableOutput = new TransferableOutput()
+      xferout.deserialize(s, encoding)
+      return xferout
+    })
+    this.rewardOwners = new ParseableOutput()
+    this.rewardOwners.deserialize(fields["rewardOwners"], encoding)
+  }
+
+  protected subnetID: Buffer = Buffer.alloc(32)
+  protected stakeOuts: TransferableOutput[] = []
+  protected rewardOwners: ParseableOutput = undefined
+
+  /**
+   * Returns the id of the [[AddDelegatorTx]]
+   */
+  getTxType(): number {
+    return this._typeID
+  }
+
+  /**
+   * Returns a {@link https://github.com/indutny/bn.js/|BN} for the stake amount.
+   */
+  getStakeAmount(): BN {
+    return this.getWeight()
+  }
+
+  /**
+   * Returns a {@link https://github.com/feross/buffer|Buffer} for the stake amount.
+   */
+  getStakeAmountBuffer(): Buffer {
+    return this.weight
+  }
+
+  getSubnetID(): Buffer {
+    return this.subnetID
+  }
+
+  /**
+   * Returns the array of outputs being staked.
+   */
+  getStakeOuts(): TransferableOutput[] {
+    return this.stakeOuts
+  }
+
+  /**
+   * Should match stakeAmount. Used in sanity checking.
+   */
+  getStakeOutsTotal(): BN {
+    let val: BN = new BN(0)
+    for (let i: number = 0; i < this.stakeOuts.length; i++) {
+      val = val.add(
+        (this.stakeOuts[`${i}`].getOutput() as AmountOutput).getAmount()
+      )
+    }
+    return val
+  }
+
+  /**
+   * Returns a {@link https://github.com/feross/buffer|Buffer} for the reward address.
+   */
+  getRewardOwners(): ParseableOutput {
+    return this.rewardOwners
+  }
+
+  getTotalOuts(): TransferableOutput[] {
+    return [...(this.getOuts() as TransferableOutput[]), ...this.getStakeOuts()]
+  }
+
+  fromBuffer(bytes: Buffer, offset: number = 0): number {
+    offset = super.fromBuffer(bytes, offset)
+    this.subnetID = bintools.copyFrom(bytes, offset, offset + 32)
+    offset += 32
+    const numstakeouts = bintools.copyFrom(bytes, offset, offset + 4)
+    offset += 4
+    const outcount: number = numstakeouts.readUInt32BE(0)
+    this.stakeOuts = []
+    for (let i: number = 0; i < outcount; i++) {
+      const xferout: TransferableOutput = new TransferableOutput()
+      offset = xferout.fromBuffer(bytes, offset)
+      this.stakeOuts.push(xferout)
+    }
+    this.rewardOwners = new ParseableOutput()
+    offset = this.rewardOwners.fromBuffer(bytes, offset)
+    return offset
+  }
+
+  /**
+   * Returns a {@link https://github.com/feross/buffer|Buffer} representation of the [[AddDelegatorTx]].
+   */
+  toBuffer(): Buffer {
+    const superbuff: Buffer = super.toBuffer()
+    let bsize: number = superbuff.length
+    const numouts: Buffer = Buffer.alloc(4)
+    numouts.writeUInt32BE(this.stakeOuts.length, 0)
+    let barr: Buffer[] = [super.toBuffer(), this.subnetID, numouts]
+    bsize += this.subnetID.length + numouts.length
+    this.stakeOuts = this.stakeOuts.sort(TransferableOutput.comparator())
+    for (let i: number = 0; i < this.stakeOuts.length; i++) {
+      let out: Buffer = this.stakeOuts[`${i}`].toBuffer()
+      barr.push(out)
+      bsize += out.length
+    }
+    let ro: Buffer = this.rewardOwners.toBuffer()
+    barr.push(ro)
+    bsize += ro.length
+    return Buffer.concat(barr, bsize)
+  }
+
+  clone(): this {
+    let newbase: AddPermissionlessDelegatorTx = new AddPermissionlessDelegatorTx()
+    newbase.fromBuffer(this.toBuffer())
+    return newbase as this
+  }
+
+  create(...args: any[]): this {
+    return new AddPermissionlessDelegatorTx(...args) as this
+  }
+
+  /**
+   * Class representing an unsigned AddPermissionlessDelegatorTx transaction.
+   *
+   * @param networkID Optional. Networkid, [[DefaultNetworkID]]
+   * @param blockchainID Optional. Blockchainid, default Buffer.alloc(32, 16)
+   * @param outs Optional. Array of the [[TransferableOutput]]s
+   * @param ins Optional. Array of the [[TransferableInput]]s
+   * @param memo Optional. {@link https://github.com/feross/buffer|Buffer} for the memo field
+   * @param nodeID Optional. The node ID of the validator being added.
+   * @param startTime Optional. The Unix time when the validator starts validating the Primary Network.
+   * @param endTime Optional. The Unix time when the validator stops validating the Primary Network (and staked AVAX is returned).
+   * @param stakeAmount Optional. The amount of nAVAX the validator is staking.
+   * @param stakeOuts Optional. The outputs used in paying the stake.
+   * @param rewardOwners Optional. The [[ParseableOutput]] containing a [[SECPOwnerOutput]] for the rewards.
+   */
+  constructor(
+    networkID: number = DefaultNetworkID,
+    blockchainID: Buffer = Buffer.alloc(32, 16),
+    outs: TransferableOutput[] = undefined,
+    ins: TransferableInput[] = undefined,
+    memo: Buffer = undefined,
+    nodeID: Buffer = undefined,
+    startTime: BN = undefined,
+    endTime: BN = undefined,
+    stakeAmount: BN = undefined,
+    stakeOuts: TransferableOutput[] = undefined,
+    rewardOwners: ParseableOutput = undefined,
+    subnetID: string | Buffer = undefined
+  ) {
+    super(
+      networkID,
+      blockchainID,
+      outs,
+      ins,
+      memo,
+      nodeID,
+      startTime,
+      endTime,
+      stakeAmount
+    )
+    if (typeof subnetID != "undefined") {
+      if (typeof subnetID === "string") {
+        this.subnetID = bintools.cb58Decode(subnetID)
+      } else {
+        this.subnetID = subnetID
+      }
+    }
+    if (typeof stakeOuts !== undefined) {
+      this.stakeOuts = stakeOuts
+    }
+    this.rewardOwners = rewardOwners
+  }
+}
+
 export class AddValidatorTx extends AddDelegatorTx {
   protected _typeName = "AddValidatorTx"
   protected _typeID = PlatformVMConstants.ADDVALIDATORTX
@@ -556,6 +748,13 @@ export class AddPermissionlessValidatorTx extends WeightedValidatorTx {
   protected delegationShares: number = 0 // Fee from 0-100
   private static delegatorMultiplier: number = 10000
 
+  /**
+   * Returns the id of the [[AddPermissionlessValidatorTx]]
+   */
+  getTxType(): number {
+    return this._typeID
+  }
+
   getDelegationFee(): number {
     return this.delegationShares
   }
@@ -580,6 +779,10 @@ export class AddPermissionlessValidatorTx extends WeightedValidatorTx {
    */
   getStakeOuts(): TransferableOutput[] {
     return this.stakeOuts
+  }
+
+  getTotalOuts(): TransferableOutput[] {
+    return [...(this.getOuts() as TransferableOutput[]), ...this.getStakeOuts()]
   }
 
   /**
@@ -753,35 +956,67 @@ export class Signer {
 }
 
 export class ProofOfPossession {
-  protected publicKey: Buffer = Buffer.alloc(48)
-  protected signature: Buffer = Buffer.alloc(96)
+  protected publicKey: PublicKey
+  protected signature: Signature
 
   fromBuffer(bytes: Buffer, offset: number = 0): number {
-    this.publicKey = bintools.copyFrom(bytes, offset, offset + 48)
+    this.publicKey = publicKeyFromBytes(bintools.copyFrom(bytes, offset, offset + 48))
     offset += 48
-    this.signature = bintools.copyFrom(bytes, offset, offset + 96)
+    this.signature = signatureFromBytes(bintools.copyFrom(bytes, offset, offset + 96))
     offset += 96
+
+    this.publicKey.assertValidity()
+    this.signature.assertValidity()
+
+    if (!verifyProofOfPossession(this.publicKey, this.signature, this.publicKey.toRawBytes())) {
+      throw new Error(`Proof of possession is not valid`);
+    }
     
     return offset
   }
 
   toBuffer(): Buffer {
-    return Buffer.concat([this.publicKey, this.signature])
+    const pkBytes: Buffer = Buffer.from(this.publicKey.toRawBytes())
+    const sigBytes: Buffer = Buffer.from(this.signature.toRawBytes())
+    return Buffer.concat([pkBytes, sigBytes])
   }
 
   getPublicKeyString(): string {
-    return this.publicKey.toString('hex')
+    return Buffer.from(this.publicKey.toRawBytes()).toString('hex')
   }
 
   getSignature(): string {
-    return this.signature.toString('hex')
+    return Buffer.from(this.signature.toRawBytes()).toString('hex')
   }
 
   constructor(
-    publicKey?: Buffer,
-    signature?: Buffer,
+    publicKey: string | Buffer = undefined,
+    signature: string | Buffer = undefined,
   ) {
-    this.publicKey = publicKey
-    this.signature = signature
+    if (typeof publicKey != "undefined") {
+      if (typeof publicKey === "string") {
+        this.publicKey = publicKeyFromBytes(Buffer.from(ethers.utils.arrayify(publicKey)))
+      } else {
+        this.publicKey = publicKeyFromBytes(publicKey)
+      }
+
+      this.publicKey.assertValidity()
+    }
+
+    if (typeof signature != "undefined") {
+      if (typeof signature === "string") {
+        this.signature = signatureFromBytes(Buffer.from(ethers.utils.arrayify(signature)))
+      } else {
+        this.signature = signatureFromBytes(signature)
+      }
+
+      this.signature.assertValidity()
+    }
+
+    if (this.publicKey && this.signature){
+      if (!verifyProofOfPossession(this.publicKey, this.signature, this.publicKey.toRawBytes())) {
+        throw new Error(`Proof of possession is not valid`);
+      }
+    }
   }
 }
